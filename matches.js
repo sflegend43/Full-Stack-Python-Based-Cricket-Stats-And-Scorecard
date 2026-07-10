@@ -375,24 +375,102 @@ async function goToStep3() {
             showToast('Warning: One or both teams have no tournament squad assigned.', 'error');
         }
 
-        xi1.innerHTML = squad1.map(p => `
-            <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem; cursor:pointer;">
-                <input type="checkbox" name="team1_xi" value="${p.playerID}" style="accent-color:var(--primary);">
-                <span style="color:var(--text); font-size:0.85rem;">${p.playerName} <span style="color:var(--text-muted); font-size:0.75rem;">(${p.playerRole})</span></span>
-            </label>
-        `).join('');
+        const KNOWN_OPENERS = [
+            "Rohit Sharma", "Shubman Gill", "Yashasvi Jaiswal", "Ishan Kishan",
+            "Fakhar Zaman", "Saim Ayub", "Imam-ul-Haq", "Babar Azam", "Mohammad Rizwan",
+            "David Warner", "Travis Head", "Usman Khawaja", "Mitchell Marsh", "Matt Short",
+            "Quinton de Kock", "Temba Bavuma", "Reeza Hendricks", "Ryan Rickelton", 
+            "Devon Conway", "Finn Allen", "Will Young", "Tom Latham", "Rachin Ravindra",
+            "Jos Buttler", "Phil Salt", "Jonny Bairstow", "Zak Crawley", "Ben Duckett", "Jason Roy",
+            "Brandon King", "Kyle Mayers", "Johnson Charles", "Shai Hope", "Kraigg Brathwaite", "Evin Lewis",
+            "Pathum Nissanka", "Kusal Mendis", "Dimuth Karunaratne", "Avishka Fernando",
+            "Litton Das", "Tanzid Hasan", "Najmul Hossain Shanto", "Tamim Iqbal",
+            "Rahmanullah Gurbaz", "Ibrahim Zadran", "Hazratullah Zazai"
+        ];
+
+        function buildSquadUI(squad, teamIndex) {
+            const categories = {
+                'Openers': [],
+                'Middle Order': [],
+                'WicketKeepers': [],
+                'AllRounders': [],
+                'Spinners': [],
+                'Fast Bowlers': []
+            };
+
+            squad.forEach(p => {
+                const role = p.playerRole || '';
+                const bowl = p.bowlingStyle || '';
+                const name = p.playerName || '';
+                
+                if (role === 'Batsman' || role === 'WicketKeeper') {
+                    if (KNOWN_OPENERS.includes(name)) {
+                        categories['Openers'].push(p);
+                    } else if (role === 'WicketKeeper') {
+                        categories['WicketKeepers'].push(p);
+                    } else {
+                        categories['Middle Order'].push(p);
+                    }
+                } else if (role === 'AllRounder') {
+                    categories['AllRounders'].push(p);
+                } else if (role === 'Bowler') {
+                    if (bowl.includes('Spin') || bowl.includes('Break') || bowl.includes('Orthodox')) {
+                        categories['Spinners'].push(p);
+                    } else {
+                        categories['Fast Bowlers'].push(p);
+                    }
+                } else {
+                    categories['Middle Order'].push(p);
+                }
+            });
+
+            let html = '';
+            const order = ['Openers', 'Middle Order', 'WicketKeepers', 'AllRounders', 'Spinners', 'Fast Bowlers'];
+            
+            order.forEach(cat => {
+                const players = categories[cat];
+                if (players.length > 0) {
+                    html += `<div style="font-size:0.75rem; font-weight:700; color:var(--primary-light); margin-top:0.8rem; margin-bottom:0.4rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:0.2rem; text-transform:uppercase;">${cat}</div>`;
+                    players.forEach(p => {
+                        html += `
+                        <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem; cursor:pointer;">
+                            <input type="checkbox" name="team${teamIndex}_xi" value="${p.playerID}" style="accent-color:var(--primary);" onchange="updateXICounts()">
+                            <span style="color:var(--text); font-size:0.85rem;">${p.playerName} <span style="color:var(--text-muted); font-size:0.75rem;">(${p.playerRole})</span></span>
+                        </label>`;
+                    });
+                }
+            });
+
+            return html;
+        }
+
+        xi1.innerHTML = buildSquadUI(squad1, 1);
+        xi2.innerHTML = buildSquadUI(squad2, 2);
         
-        xi2.innerHTML = squad2.map(p => `
-            <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem; cursor:pointer;">
-                <input type="checkbox" name="team2_xi" value="${p.playerID}" style="accent-color:var(--primary);">
-                <span style="color:var(--text); font-size:0.85rem;">${p.playerName} <span style="color:var(--text-muted); font-size:0.75rem;">(${p.playerRole})</span></span>
-            </label>
-        `).join('');
+        // initialize counts
+        setTimeout(updateXICounts, 50);
         
         document.getElementById('wizard-step-2').style.display = 'none';
         document.getElementById('wizard-step-3').style.display = 'block';
     } catch {
         showToast('Failed to load tournament squads', 'error');
+    }
+}
+
+function updateXICounts() {
+    const t1 = document.querySelectorAll('input[name="team1_xi"]:checked').length;
+    const t2 = document.querySelectorAll('input[name="team2_xi"]:checked').length;
+    
+    const count1 = document.getElementById('count-team1-xi');
+    const count2 = document.getElementById('count-team2-xi');
+    
+    if (count1) {
+        count1.textContent = `${t1}/11`;
+        count1.style.background = t1 === 11 ? 'var(--neon-green)' : (t1 > 11 ? 'var(--red-ball-light)' : 'var(--primary)');
+    }
+    if (count2) {
+        count2.textContent = `${t2}/11`;
+        count2.style.background = t2 === 11 ? 'var(--neon-green)' : (t2 > 11 ? 'var(--red-ball-light)' : 'var(--primary)');
     }
 }
 
