@@ -14,6 +14,10 @@ let beRuns      = 0;
 let beDelType   = 'Normal';   // Normal | Wide | NoBall
 let beLastBallId = null;
 let bePlayers   = [];
+let currentStriker = null;
+let currentNonStriker = null;
+let currentBowler = null;
+let contextMode = '';
 
 // ── Helpers ─────────────────────────────────────────────
 function getUser() {
@@ -80,7 +84,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ── Load matches list ───────────────────────────────────
 async function loadMatches() {
     try {
-        const res = await fetch(`${API}/api/matches`);
+        const res = await authFetch(`${API}/api/matches`);
         allMatches = await res.json();
         renderMatchList(allMatches);
     } catch {
@@ -124,7 +128,7 @@ function renderMatchList(matches) {
             <td style="color:var(--text-muted); font-size:0.78rem;">${m.matchDate || '—'}</td>
             <td style="display:flex; gap:0.4rem;">
                 <button class="btn-view" onclick="viewScorecard(${m.matchID})">📋 Scorecard</button>
-                <button class="btn-delete" onclick="deleteMatch(${m.matchID})">🗑</button>
+                ${getUser()?.isAdmin ? `<button class="btn-delete" onclick="deleteMatch(${m.matchID})">🗑</button>` : ''}
             </td>
         </tr>`;
     }).join('');
@@ -133,7 +137,7 @@ function renderMatchList(matches) {
 // ── Scorecard view ──────────────────────────────────────
 async function viewScorecard(matchId) {
     try {
-        const res  = await fetch(`${API}/api/stats/scorecard/${matchId}`);
+        const res  = await authFetch(`${API}/api/stats/scorecard/${matchId}`);
         const data = await res.json();
         if (res.ok) {
             currentScorecard = data;
@@ -261,7 +265,7 @@ function switchInnings(tab) {
 async function deleteMatch(mid) {
     if (!confirm(`Delete Match #${mid}? All ball-by-ball data will also be removed.`)) return;
     try {
-        const res = await fetch(`${API}/api/matches/${mid}`, { method: 'DELETE' });
+        const res = await authFetch(`${API}/api/matches/${mid}`, { method: 'DELETE' });
         if (res.ok) { showToast(`Match #${mid} deleted.`); await loadMatches(); }
         else { const d = await res.json(); showToast(d.error || 'Delete failed', 'error'); }
     } catch { showToast('Server error.', 'error'); }
@@ -271,10 +275,10 @@ async function deleteMatch(mid) {
 async function populateSelectDropdowns() {
     try {
         const [teams, venues, umpires, tournaments] = await Promise.all([
-            fetch(`${API}/api/teams`).then(r => r.json()),
-            fetch(`${API}/api/venues`).then(r => r.json()),
-            fetch(`${API}/api/umpires`).then(r => r.json()),
-            fetch(`${API}/api/tournaments`).then(r => r.json())
+            authFetch(`${API}/api/teams`).then(r => r.json()),
+            authFetch(`${API}/api/venues`).then(r => r.json()),
+            authFetch(`${API}/api/umpires`).then(r => r.json()),
+            authFetch(`${API}/api/tournaments`).then(r => r.json())
         ]);
         
         const trnSelect = document.getElementById('m-tournament');
@@ -362,7 +366,7 @@ async function goToStep3() {
     document.getElementById('label-team2-xi').textContent = shortTeam(t2);
     
     try {
-        const res = await fetch(`${API}/api/tournaments/${encodeURIComponent(tournamentName)}/squad`);
+        const res = await authFetch(`${API}/api/tournaments/${encodeURIComponent(tournamentName)}/squad`);
         const squads = await res.json();
         
         const squad1 = squads[t1] || [];
@@ -392,7 +396,6 @@ async function goToStep3() {
             const categories = {
                 'Openers': [],
                 'Middle Order': [],
-                'WicketKeepers': [],
                 'AllRounders': [],
                 'Spinners': [],
                 'Fast Bowlers': []
@@ -406,8 +409,6 @@ async function goToStep3() {
                 if (role === 'Batsman' || role === 'WicketKeeper') {
                     if (KNOWN_OPENERS.includes(name)) {
                         categories['Openers'].push(p);
-                    } else if (role === 'WicketKeeper') {
-                        categories['WicketKeepers'].push(p);
                     } else {
                         categories['Middle Order'].push(p);
                     }
@@ -425,7 +426,7 @@ async function goToStep3() {
             });
 
             let html = '';
-            const order = ['Openers', 'Middle Order', 'WicketKeepers', 'AllRounders', 'Spinners', 'Fast Bowlers'];
+            const order = ['Openers', 'Middle Order', 'AllRounders', 'Spinners', 'Fast Bowlers'];
             
             order.forEach(cat => {
                 const players = categories[cat];
@@ -434,7 +435,7 @@ async function goToStep3() {
                     players.forEach(p => {
                         html += `
                         <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem; cursor:pointer;">
-                            <input type="checkbox" name="team${teamIndex}_xi" value="${p.playerID}" style="accent-color:var(--primary);" onchange="updateXICounts()">
+                            <input type="checkbox" name="team${teamIndex}_xi" value="${p.playerID}" data-role="${p.playerRole}" data-name="${p.playerName.replace(/"/g, '&quot;')}" style="accent-color:var(--primary);" onchange="updateXICounts()">
                             <span style="color:var(--text); font-size:0.85rem;">${p.playerName} <span style="color:var(--text-muted); font-size:0.75rem;">(${p.playerRole})</span></span>
                         </label>`;
                     });
@@ -457,9 +458,20 @@ async function goToStep3() {
     }
 }
 
+function populateDropdown(selectId, options, placeholder, currentVal) {
+    const el = document.getElementById(selectId);
+    if (!el) return;
+    el.innerHTML = `<option value="">${placeholder}</option>` + options.map(o => 
+        `<option value="${o.value}" ${o.value === currentVal ? 'selected' : ''}>${o.text}</option>`
+    ).join('');
+}
+
 function updateXICounts() {
-    const t1 = document.querySelectorAll('input[name="team1_xi"]:checked').length;
-    const t2 = document.querySelectorAll('input[name="team2_xi"]:checked').length;
+    const t1Checked = Array.from(document.querySelectorAll('input[name="team1_xi"]:checked'));
+    const t2Checked = Array.from(document.querySelectorAll('input[name="team2_xi"]:checked'));
+    
+    const t1 = t1Checked.length;
+    const t2 = t2Checked.length;
     
     const count1 = document.getElementById('count-team1-xi');
     const count2 = document.getElementById('count-team2-xi');
@@ -472,6 +484,20 @@ function updateXICounts() {
         count2.textContent = `${t2}/11`;
         count2.style.background = t2 === 11 ? 'var(--neon-green)' : (t2 > 11 ? 'var(--red-ball-light)' : 'var(--primary)');
     }
+
+    const t1c = document.getElementById('m-team1-c')?.value;
+    const t1wk = document.getElementById('m-team1-wk')?.value;
+    const t2c = document.getElementById('m-team2-c')?.value;
+    const t2wk = document.getElementById('m-team2-wk')?.value;
+
+    const t1Opts = t1Checked.map(cb => ({ value: cb.value, text: cb.dataset.name, role: cb.dataset.role }));
+    const t2Opts = t2Checked.map(cb => ({ value: cb.value, text: cb.dataset.name, role: cb.dataset.role }));
+
+    populateDropdown('m-team1-c', t1Opts, 'Select Captain...', t1c);
+    populateDropdown('m-team1-wk', t1Opts.filter(o => o.role === 'WicketKeeper'), 'Select Wicket Keeper...', t1wk);
+
+    populateDropdown('m-team2-c', t2Opts, 'Select Captain...', t2c);
+    populateDropdown('m-team2-wk', t2Opts.filter(o => o.role === 'WicketKeeper'), 'Select Wicket Keeper...', t2wk);
 }
 
 function goToStep1() {
@@ -486,13 +512,38 @@ async function handleMatchWizard(e) {
     const team1Cbs = Array.from(document.querySelectorAll('input[name="team1_xi"]:checked'));
     const team2Cbs = Array.from(document.querySelectorAll('input[name="team2_xi"]:checked'));
     
-    const team1Xi = team1Cbs.map(cb => cb.value);
-    const team2Xi = team2Cbs.map(cb => cb.value);
-    
-    if(team1Xi.length !== 11 || team2Xi.length !== 11) {
-        showToast(`Please select exactly 11 players for each team. (${team1Xi.length} and ${team2Xi.length} selected)`, 'error');
+    if(team1Cbs.length !== 11 || team2Cbs.length !== 11) {
+        showToast(`Please select exactly 11 players for each team. (${team1Cbs.length} and ${team2Cbs.length} selected)`, 'error');
         return;
     }
+
+    const t1c = document.getElementById('m-team1-c').value;
+    const t1wk = document.getElementById('m-team1-wk').value;
+    const t2c = document.getElementById('m-team2-c').value;
+    const t2wk = document.getElementById('m-team2-wk').value;
+
+    if (!t1c || !t1wk || !t2c || !t2wk) {
+        showToast('Please select a Captain and Wicket Keeper for both teams.', 'error');
+        return;
+    }
+
+    const team1Xi = team1Cbs.map(cb => {
+        const id = cb.value;
+        let role = null;
+        if (id === t1c && id === t1wk) role = 'C & WK';
+        else if (id === t1c) role = 'C';
+        else if (id === t1wk) role = 'WK';
+        return { playerID: id, matchRole: role };
+    });
+    
+    const team2Xi = team2Cbs.map(cb => {
+        const id = cb.value;
+        let role = null;
+        if (id === t2c && id === t2wk) role = 'C & WK';
+        else if (id === t2c) role = 'C';
+        else if (id === t2wk) role = 'WK';
+        return { playerID: id, matchRole: role };
+    });
 
     const body = {
         matchID:          parseInt(document.getElementById('m-id').value),
@@ -510,12 +561,12 @@ async function handleMatchWizard(e) {
     };
     
     try {
-        const res = await fetch(`${API}/api/matches`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+        const res = await authFetch(`${API}/api/matches`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
         const data = await res.json();
         if (!res.ok) { showToast(data.error || 'Add failed', 'error'); return; }
         
         // Now post Playing XI
-        const xiRes = await fetch(`${API}/api/matches/${body.matchID}/xi`, {
+        const xiRes = await authFetch(`${API}/api/matches/${body.matchID}/xi`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ players: [...team1Xi, ...team2Xi] })
@@ -541,7 +592,7 @@ async function openBallEntry() {
 
     // Fetch current state from server
     try {
-        const res  = await fetch(`${API}/api/balls/state/${beMatchId}?innings=${beInnings}`);
+        const res  = await authFetch(`${API}/api/balls/state/${beMatchId}?innings=${beInnings}`);
         const data = await res.json();
 
         bePlayers = data.players || [];
@@ -551,6 +602,13 @@ async function openBallEntry() {
         // Pre-fill over/ball
         document.getElementById('be-over').value = data.nextOver;
         document.getElementById('be-ball').value = data.nextBall;
+
+        if (data.nextOver === 1 && data.nextBall === 1) {
+            openContextModal('innings_start');
+        } else {
+            if (currentStriker) document.getElementById('be-batsman').value = currentStriker;
+            if (currentBowler)  document.getElementById('be-bowler').value  = currentBowler;
+        }
     } catch {
         bePlayers = [];
         populateBallDropdowns();
@@ -590,6 +648,72 @@ function populateBallDropdowns() {
     if (fielderSel) fielderSel.innerHTML = fieldOpts;
 }
 
+// ── Context Modal ──
+function openContextModal(mode) {
+    contextMode = mode;
+    const modal = document.getElementById('contextModal');
+    const title = document.getElementById('contextModalTitle');
+    const strikerDiv = document.getElementById('contextStrikerContainer');
+    const nonStrikerDiv = document.getElementById('contextNonStrikerContainer');
+    const bowlerDiv = document.getElementById('contextBowlerContainer');
+
+    const batOpts  = bePlayers.filter(p => p.canBat || true).map(p => `<option value="${p.playerID}">${p.playerName}</option>`).join('');
+    const bowlOpts = bePlayers.filter(p => p.canBowl || p.playerRole === 'AllRounder').map(p => `<option value="${p.playerID}">${p.playerName} (${p.playerRole})</option>`).join('');
+    
+    document.getElementById('ctx-striker').innerHTML = batOpts;
+    document.getElementById('ctx-nonstriker').innerHTML = batOpts;
+    document.getElementById('ctx-bowler').innerHTML = (bowlOpts || batOpts);
+
+    if (mode === 'innings_start') {
+        title.innerHTML = '🏏 Innings Start';
+        strikerDiv.style.display = 'block';
+        nonStrikerDiv.style.display = 'block';
+        bowlerDiv.style.display = 'block';
+    } else if (mode === 'new_over') {
+        title.innerHTML = '🔄 End of Over - New Bowler';
+        strikerDiv.style.display = 'none';
+        nonStrikerDiv.style.display = 'none';
+        bowlerDiv.style.display = 'block';
+    } else if (mode === 'wicket') {
+        title.innerHTML = '💥 Wicket Fallen - New Batsman';
+        strikerDiv.style.display = 'block';
+        nonStrikerDiv.style.display = 'none';
+        bowlerDiv.style.display = 'none';
+    } else if (mode === 'manual_swap') {
+        title.innerHTML = '🔄 Adjust Context';
+        strikerDiv.style.display = 'block';
+        nonStrikerDiv.style.display = 'block';
+        bowlerDiv.style.display = 'block';
+    }
+
+    if (currentStriker) document.getElementById('ctx-striker').value = currentStriker;
+    if (currentNonStriker) document.getElementById('ctx-nonstriker').value = currentNonStriker;
+    if (currentBowler) document.getElementById('ctx-bowler').value = currentBowler;
+
+    modal.style.display = 'flex';
+}
+
+function confirmContext() {
+    const s = document.getElementById('ctx-striker').value;
+    const ns = document.getElementById('ctx-nonstriker').value;
+    const b = document.getElementById('ctx-bowler').value;
+
+    if (contextMode === 'innings_start' || contextMode === 'manual_swap') {
+        if (s === ns) { showToast('Striker and Non-Striker cannot be the same', 'error'); return; }
+        currentStriker = s;
+        currentNonStriker = ns;
+        currentBowler = b;
+    } else if (contextMode === 'new_over') {
+        currentBowler = b;
+    } else if (contextMode === 'wicket') {
+        currentStriker = s;
+    }
+
+    document.getElementById('be-batsman').value = currentStriker;
+    document.getElementById('be-bowler').value  = currentBowler;
+    document.getElementById('contextModal').style.display = 'none';
+}
+
 function updateScoreboardStrip(runs, wickets, over, ball) {
     const scoreEl  = document.getElementById('be-score-display');
     const overEl   = document.getElementById('be-over-display');
@@ -607,7 +731,7 @@ function switchEntryInnings(inn) {
 
     // Reload state for the new innings
     if (beMatchId) {
-        fetch(`${API}/api/balls/state/${beMatchId}?innings=${inn}`)
+        authFetch(`${API}/api/balls/state/${beMatchId}?innings=${inn}`)
             .then(r => r.json())
             .then(data => {
                 document.getElementById('be-over').value = data.nextOver;
@@ -746,7 +870,7 @@ async function submitBall() {
     try {
         let res, data;
         if (beEditingBallId) {
-            res = await fetch(`${API}/api/balls/${beEditingBallId}`, {
+            res = await authFetch(`${API}/api/balls/${beEditingBallId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -755,7 +879,7 @@ async function submitBall() {
             if (!res.ok) { showToast(data.error || 'Failed to update ball.', 'error'); return; }
             beEditingBallId = null;
         } else {
-            res = await fetch(`${API}/api/balls`, {
+            res = await authFetch(`${API}/api/balls`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -774,9 +898,35 @@ async function submitBall() {
         // Advance ball counter
         let nextBall = ball + 1;
         let nextOver = over;
-        if (beDelType === 'Normal' && nextBall > 6) { nextOver++; nextBall = 1; }
+        let overEnded = false;
+        if (beDelType === 'Normal' && nextBall > 6) { nextOver++; nextBall = 1; overEnded = true; }
         document.getElementById('be-over').value = nextOver;
         document.getElementById('be-ball').value = nextBall;
+
+        // Swap logic
+        let runsToConsider = beRuns;
+        if (effectiveExtraType === 'Bye' || effectiveExtraType === 'LegBye') {
+            runsToConsider = parseInt(extras) || 0;
+        }
+        if (runsToConsider % 2 !== 0) {
+            let temp = currentStriker;
+            currentStriker = currentNonStriker;
+            currentNonStriker = temp;
+        }
+
+        if (overEnded) {
+            let temp = currentStriker;
+            currentStriker = currentNonStriker;
+            currentNonStriker = temp;
+        }
+
+        if (isWicket) {
+            openContextModal('wicket');
+        } else if (overEnded) {
+            openContextModal('new_over');
+        } else {
+            if (currentStriker) document.getElementById('be-batsman').value = currentStriker;
+        }
 
         showToast(`Ball ${over}.${ball} recorded! ${data.totalRuns}/${data.wickets}`);
 
@@ -792,7 +942,7 @@ async function submitBall() {
 async function updateTimeline() {
     if(!beMatchId) return;
     try {
-        const res = await fetch(`${API}/api/balls/${beMatchId}?innings=${beInnings}`);
+        const res = await authFetch(`${API}/api/balls/${beMatchId}?innings=${beInnings}`);
         const balls = await res.json();
         
         const timeline = document.getElementById('be-timeline');
@@ -853,18 +1003,18 @@ async function undoLastBall() {
     if (!beMatchId) return;
     try {
         // Find last ball ID from log
-        const res  = await fetch(`${API}/api/balls/${beMatchId}?innings=${beInnings}`);
+        const res  = await authFetch(`${API}/api/balls/${beMatchId}?innings=${beInnings}`);
         const balls = await res.json();
         if (!balls.length) { showToast('No balls to undo.', 'error'); return; }
 
         const last = balls[balls.length - 1];
-        const del  = await fetch(`${API}/api/balls/${last.ballID}`, { method: 'DELETE' });
+        const del  = await authFetch(`${API}/api/balls/${last.ballID}`, { method: 'DELETE' });
         const data = await del.json();
         if (!del.ok) { showToast(data.error || 'Undo failed.', 'error'); return; }
 
         showToast(`Ball ${last.overNumber}.${last.ballNumber} undone.`);
         // Refresh state
-        const state = await fetch(`${API}/api/balls/state/${beMatchId}?innings=${beInnings}`).then(r => r.json());
+        const state = await authFetch(`${API}/api/balls/state/${beMatchId}?innings=${beInnings}`).then(r => r.json());
         updateScoreboardStrip(state.totalRuns, state.wickets, state.nextOver, state.nextBall);
         document.getElementById('be-over').value = state.nextOver;
         document.getElementById('be-ball').value = state.nextBall;
@@ -879,7 +1029,7 @@ let beBallLog = [];
 
 async function loadBallLog(matchId, innings = 1) {
     try {
-        const res   = await fetch(`${API}/api/balls/${matchId}?innings=${innings}`);
+        const res   = await authFetch(`${API}/api/balls/${matchId}?innings=${innings}`);
         beBallLog = await res.json();
         renderBallLogViz(beBallLog);
         renderBallLogTable(beBallLog);
@@ -1010,7 +1160,7 @@ function editBall(ballId) {
 async function confirmDeleteBall(ballId) {
     if (!confirm('Delete this ball? Match scores will be recalculated.')) return;
     try {
-        const res  = await fetch(`${API}/api/balls/${ballId}`, { method: 'DELETE' });
+        const res  = await authFetch(`${API}/api/balls/${ballId}`, { method: 'DELETE' });
         const data = await res.json();
         if (!res.ok) { showToast(data.error || 'Delete failed.', 'error'); return; }
         showToast('Ball deleted and scores updated.');

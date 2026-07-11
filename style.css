@@ -56,9 +56,6 @@ body::before {
     content: '';
     position: fixed;
     inset: 0;
-    background:
-        radial-gradient(ellipse 80% 60% at 20% 10%, rgba(22,163,74,0.10)  0%, transparent 60%),
-        radial-gradient(ellipse 60% 50% at 80% 90%, rgba(251,191,36,0.06) 0%, transparent 60%);
     z-index: -1;
     pointer-events: none;
 }
@@ -74,8 +71,8 @@ body::before {
    NAVBAR
 ════════════════════════════════════════════ */
 nav {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 300px 1fr 300px;
     align-items: center;
     padding: 1.2rem 0 2rem;
     animation: slideDown 0.6s ease-out;
@@ -90,6 +87,7 @@ nav {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    justify-self: start;
 }
 
 .logo-icon {
@@ -135,6 +133,7 @@ nav {
     align-items: center;
     gap: 0.15rem;
     list-style: none;
+    justify-self: center;
 }
 
 .nav-link {
@@ -167,6 +166,7 @@ nav {
     display: flex;
     align-items: center;
     gap: 1rem;
+    justify-self: end;
 }
 
 .nav-user {
@@ -235,7 +235,6 @@ nav {
 
 .glass-card:hover {
     border-color: rgba(34,197,94,0.35);
-    box-shadow: 0 8px 40px rgba(22,163,74,0.15);
     transform: translateY(-2px);
 }
 
@@ -1282,13 +1281,10 @@ tbody td {
 .ball-chip.noball{ background: rgba(168,85,247,0.2);   border-color: #c084fc;               color: #e9d5ff; }
 .ball-chip.run   { background: rgba(34,197,94,0.18);   border-color: var(--neon-green);     color: var(--neon-green); }
 
-/* Glow Effects */
+/* Glow Effects removed */
 .glow-text {
-    text-shadow: 0 0 5px #00f3ff, 0 0 10px #00f3ff, 0 0 20px rgba(0, 243, 255, 0.5);
     color: #fff !important;
 }
 
 .glow-box {
-    box-shadow: 0 0 10px rgba(0, 243, 255, 0.4), inset 0 0 10px rgba(0, 243, 255, 0.1);
-    border: 1px solid rgba(0, 243, 255, 0.6) !important;
 }

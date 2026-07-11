@@ -62,12 +62,21 @@ if (signupForm) {
         const fullname = signupForm.fullname.value.trim();
         const email    = signupForm.email.value.trim();
         const password = signupForm.password.value.trim();
+        
+        let payload = { fullname, email, password };
+        
+        if (signupForm.role) {
+            payload.role = signupForm.role.value;
+            if (payload.role === 'admin') {
+                payload.adminKey = signupForm.adminKey.value.trim();
+            }
+        }
 
         try {
             const res = await fetch(`${API}/api/signup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fullname, email, password })
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
 

@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ─── Load Teams ───
 async function loadTeams() {
     try {
-        const res   = await fetch(`${API}/api/teams`);
+        const res   = await authFetch(`${API}/api/teams`);
         const teams = await res.json();
         renderTeams(teams);
     } catch {
@@ -142,7 +142,7 @@ async function saveTeam(e) {
     };
 
     try {
-        const res = await fetch(`${API}/api/teams`, {
+        const res = await authFetch(`${API}/api/teams`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -168,7 +168,7 @@ async function saveTeam(e) {
 async function viewTeam(encodedName) {
     const teamName = decodeURIComponent(encodedName);
     try {
-        const res  = await fetch(`${API}/api/teams/${encodeURIComponent(teamName)}`);
+        const res  = await authFetch(`${API}/api/teams/${encodeURIComponent(teamName)}`);
         const data = await res.json();
         if (!res.ok) { showToast(data.error || 'Team not found', 'error'); return; }
         renderTeamDetail(data);

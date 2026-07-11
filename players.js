@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadPlayers() {
     try {
-        const res = await fetch(`${API}/api/players/by_team`);
+        const res = await authFetch(`${API}/api/players/by_team`);
         allPlayers = await res.json(); // dictionary: { teamName: [players...] }
         
         const teamSelect = document.getElementById('teamSelect');
@@ -176,10 +176,11 @@ function renderPlayers(groupedPlayers, totalCount) {
                 </div>
                 <div class="player-actions" style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
                     ${roleBadge(p.playerRole)}
+                    ${getUser()?.isAdmin ? `
                     <div class="action-btns">
                         <button class="action-btn" title="Edit" onclick="openEditModal('${p.playerID}')">✏️</button>
                         <button class="action-btn action-del" title="Delete" onclick="deletePlayer('${p.playerID}', '${p.playerName.replace(/'/g, "\\'")}')">🗑️</button>
-                    </div>
+                    </div>` : ''}
                 </div>
             </div>`;
         });
@@ -212,7 +213,7 @@ async function openAddModal() {
     
     // Fetch and populate teams
     try {
-        const res = await fetch(`${API}/api/teams`);
+        const res = await authFetch(`${API}/api/teams`);
         const teams = await res.json();
         const teamSelect = document.getElementById('add-team');
         if (teamSelect) {
@@ -256,7 +257,7 @@ function closeEditModal() {
 async function deletePlayer(pid, name) {
     if (!confirm(`Delete player "${name}"? This cannot be undone.`)) return;
     try {
-        const res = await fetch(`${API}/api/players/${pid}`, { method: 'DELETE' });
+        const res = await authFetch(`${API}/api/players/${pid}`, { method: 'DELETE' });
         const data = await res.json();
         if (!res.ok) { showToast(data.error || 'Delete failed', 'error'); return; }
         showToast(`${name} deleted successfully.`);
@@ -289,7 +290,7 @@ function setupForms() {
             teamName:          selectedTeam
         };
         try {
-            const res  = await fetch(`${API}/api/players/add_to_pool`, {
+            const res  = await authFetch(`${API}/api/players/add_to_pool`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -317,7 +318,7 @@ function setupForms() {
             playerRole:        document.getElementById('edit-role').value,
         };
         try {
-            const res  = await fetch(`${API}/api/players/${pid}`, {
+            const res  = await authFetch(`${API}/api/players/${pid}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)

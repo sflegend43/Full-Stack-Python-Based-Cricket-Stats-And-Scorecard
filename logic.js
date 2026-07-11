@@ -8,6 +8,23 @@ function getUser() {
     catch { return null; }
 }
 
+async function authFetch(url, options = {}) {
+    const user = getUser();
+    const headers = options.headers || {};
+    if (user && user.email) {
+        headers['X-User-Email'] = user.email;
+    }
+    return fetch(url, { ...options, headers });
+}
+
+// ─── RBAC Enforcement ───
+document.addEventListener('DOMContentLoaded', () => {
+    const _user = getUser();
+    if (!_user || !_user.isAdmin) {
+        document.querySelectorAll('.admin-only').forEach(el => el.remove());
+    }
+});
+
 function logout() {
     localStorage.removeItem('cricketUser');
     window.location.href = 'login.html';

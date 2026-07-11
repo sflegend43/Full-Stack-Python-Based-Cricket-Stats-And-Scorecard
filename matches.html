@@ -52,7 +52,7 @@
                     </h1>
                     <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.2rem;" id="match-count-label">Loading matches…</p>
                 </div>
-                <button class="btn-submit" style="width:auto; padding:0.6rem 1.4rem;" onclick="openAddMatchModal()">
+                <button class="btn-submit admin-only" style="width:auto; padding:0.6rem 1.4rem;" onclick="openAddMatchModal()">
                     ➕ Add Match
                 </button>
             </div>
@@ -92,7 +92,7 @@
         <div id="scorecard-view" style="display:none;">
             <div style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.7rem;">
                 <button class="filter-btn" onclick="backToList()">← Back to Matches</button>
-                <button class="btn-submit" style="width:auto; padding:0.5rem 1.2rem;" onclick="openBallEntry()">🏏 Enter Ball</button>
+                <button class="btn-submit admin-only" style="width:auto; padding:0.5rem 1.2rem;" onclick="openBallEntry()">🏏 Enter Ball</button>
             </div>
             <div id="scorecard-header-box"></div>
 
@@ -252,7 +252,10 @@
             <!-- Batsman / Bowler -->
             <div class="form-row" style="margin-bottom:1rem;">
                 <div>
-                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">🏏 Batsman (Striker)</label>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:flex; justify-content:space-between; margin-bottom:0.3rem;">
+                        <span>🏏 Batsman (Striker)</span>
+                        <span style="color:var(--gold); cursor:pointer; font-size:0.75rem;" onclick="openContextModal('manual_swap')">🔄 Swap/Adjust</span>
+                    </label>
                     <select id="be-batsman" style="width:100%;"></select>
                 </div>
                 <div>
@@ -480,14 +483,18 @@
                                 <span><span id="label-team1-xi">Team 1</span> Playing XI *</span>
                                 <span id="count-team1-xi" style="background:var(--primary); color:#000; padding:3px 8px; border-radius:12px; font-size:0.7rem; font-weight:700;">0/11</span>
                             </label>
-                            <div id="m-team1-xi" style="max-height:400px; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:8px; padding:0.8rem; border:1px solid rgba(255,255,255,0.1);"></div>
+                            <div id="m-team1-xi" style="max-height:400px; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:8px; padding:0.8rem; border:1px solid rgba(255,255,255,0.1); margin-bottom: 0.8rem;"></div>
+                            <select id="m-team1-c" class="form-input" style="margin-bottom:0.5rem; width:100%;"><option value="">Select Captain...</option></select>
+                            <select id="m-team1-wk" class="form-input" style="width:100%;"><option value="">Select Wicket Keeper...</option></select>
                         </div>
                         <div style="flex:1;">
                             <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
                                 <span><span id="label-team2-xi">Team 2</span> Playing XI *</span>
                                 <span id="count-team2-xi" style="background:var(--primary); color:#000; padding:3px 8px; border-radius:12px; font-size:0.7rem; font-weight:700;">0/11</span>
                             </label>
-                            <div id="m-team2-xi" style="max-height:400px; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:8px; padding:0.8rem; border:1px solid rgba(255,255,255,0.1);"></div>
+                            <div id="m-team2-xi" style="max-height:400px; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:8px; padding:0.8rem; border:1px solid rgba(255,255,255,0.1); margin-bottom: 0.8rem;"></div>
+                            <select id="m-team2-c" class="form-input" style="margin-bottom:0.5rem; width:100%;"><option value="">Select Captain...</option></select>
+                            <select id="m-team2-wk" class="form-input" style="width:100%;"><option value="">Select Wicket Keeper...</option></select>
                         </div>
                     </div>
 
@@ -498,6 +505,30 @@
                 </div>
 
             </form>
+        </div>
+    </div>
+
+    <!-- ═══ CONTEXT MODAL (Innings Start / New Over) ═══ -->
+    <div id="contextModal" class="modal-overlay" style="display:none; z-index: 2000;">
+        <div class="modal-card glass-card" style="max-width:400px; width:90%; text-align:center;">
+            <h3 id="contextModalTitle" style="margin-bottom: 1.5rem;">Match Context</h3>
+            
+            <div id="contextStrikerContainer" class="form-group" style="text-align:left;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">🏏 Striker</label>
+                <select id="ctx-striker" class="form-input" style="width:100%;"></select>
+            </div>
+            
+            <div id="contextNonStrikerContainer" class="form-group" style="text-align:left;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">🏏 Non-Striker</label>
+                <select id="ctx-nonstriker" class="form-input" style="width:100%;"></select>
+            </div>
+            
+            <div id="contextBowlerContainer" class="form-group" style="text-align:left;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">🎯 Bowler</label>
+                <select id="ctx-bowler" class="form-input" style="width:100%;"></select>
+            </div>
+            
+            <button class="btn-submit" style="width:100%; margin-top:1rem;" onclick="confirmContext()">✅ Confirm</button>
         </div>
     </div>
 

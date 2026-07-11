@@ -8,6 +8,26 @@ from flask import Flask, request, jsonify, send_from_directory
 import sqlite3
 import os
 import time
+from functools import wraps
+
+# ─────────────────────────────────────────────────────
+# Auth Decorator
+# ─────────────────────────────────────────────────────
+def requires_admin(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        email = request.headers.get('X-User-Email', '').lower()
+        if not email:
+            return jsonify({'error': 'Unauthorized: Admin access required'}), 403
+            
+        with get_db() as conn:
+            user = conn.execute('SELECT isAdmin FROM users WHERE email = ?', (email,)).fetchone()
+            
+        if not user or not user['isAdmin']:
+            return jsonify({'error': 'Unauthorized: Admin access required'}), 403
+            
+        return f(*args, **kwargs)
+    return decorated_function
 
 # ─────────────────────────────────────────────────────
 # App Configuration
@@ -38,6 +58,7 @@ def init_db():
                 fullname  TEXT    NOT NULL,
                 email     TEXT    UNIQUE NOT NULL,
                 password  TEXT    NOT NULL,
+                isAdmin   INTEGER DEFAULT 0,
                 created   TEXT    NOT NULL DEFAULT (datetime('now'))
             );
 
@@ -175,41 +196,9 @@ def init_db():
 def root():
     return send_from_directory(BASE_DIR, 'login.html')
 
-@app.route('/index.html')
-def dashboard():
-    return send_from_directory(BASE_DIR, 'index.html')
-
-@app.route('/login.html')
-def login_page():
-    return send_from_directory(BASE_DIR, 'login.html')
-
-@app.route('/signup.html')
-def signup_page():
-    return send_from_directory(BASE_DIR, 'signup.html')
-
-@app.route('/players.html')
-def players_page():
-    return send_from_directory(BASE_DIR, 'players.html')
-
-@app.route('/matches.html')
-def matches_page():
-    return send_from_directory(BASE_DIR, 'matches.html')
-
-@app.route('/teams.html')
-def teams_page():
-    return send_from_directory(BASE_DIR, 'teams.html')
-
-@app.route('/tournaments.html')
-def tournaments_page():
-    return send_from_directory(BASE_DIR, 'tournaments.html')
-
-@app.route('/match_entry.html')
-def match_entry_page():
-    return send_from_directory(BASE_DIR, 'match_entry.html')
-
-@app.route('/rankings.html')
-def rankings_page():
-    return send_from_directory(BASE_DIR, 'rankings.html')
+@app.route('/<page>.html')
+def serve_html_page(page):
+    return send_from_directory(BASE_DIR, f"{page}.html")
 
 
 # ─────────────────────────────────────────────────────
@@ -221,6 +210,8 @@ def signup():
     fullname = (data.get('fullname') or '').strip()
     email    = (data.get('email')    or '').strip().lower()
     password = (data.get('password') or '').strip()
+    role     = (data.get('role')     or '').strip().lower()
+    adminKey = (data.get('adminKey') or '').strip()
 
     if not fullname or not email or not password:
         return jsonify({'error': 'All fields are required'}), 400
@@ -229,13 +220,19 @@ def signup():
     if len(password) < 6:
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
 
+    is_admin = 0
+    if role == 'admin':
+        if adminKey != 'CRICKET_ADMIN_2026':
+            return jsonify({'error': 'Invalid Admin Registration Key'}), 403
+        is_admin = 1
+
     try:
         with get_db() as conn:
             conn.execute(
-                'INSERT INTO users (fullname, email, password) VALUES (?, ?, ?)',
-                (fullname, email, password)
+                'INSERT INTO users (fullname, email, password, isAdmin) VALUES (?, ?, ?, ?)',
+                (fullname, email, password, is_admin)
             )
-        return jsonify({'message': 'Account created successfully'}), 201
+        return jsonify({'message': 'Account created successfully', 'user': {'fullname': fullname, 'email': email, 'isAdmin': bool(is_admin)}}), 201
     except sqlite3.IntegrityError:
         return jsonify({'error': 'Email already registered. Please log in instead.'}), 400
 
@@ -258,7 +255,8 @@ def login():
     if not user:
         return jsonify({'error': 'Invalid email or password'}), 401
 
-    return jsonify({'user': {'fullname': user['fullname'], 'email': user['email']}})
+    is_admin = bool(user['isAdmin']) if 'isAdmin' in user.keys() else False
+    return jsonify({'user': {'fullname': user['fullname'], 'email': user['email'], 'isAdmin': is_admin}})
 
 
 import seed_data
@@ -281,6 +279,7 @@ def reset_db_api():
     return jsonify({'message': 'DB reset complete'})
 
 @app.route('/api/seed', methods=['POST'])
+@requires_admin
 def seed():
     with get_db() as conn:
         # Check if already seeded
@@ -353,6 +352,7 @@ def get_players_by_team():
     return jsonify(grouped)
 
 @app.route('/api/players/add_to_pool', methods=['POST'])
+@requires_admin
 def add_player_to_pool():
     d = request.get_json(silent=True) or {}
     name  = (d.get('playerName')        or '').strip()
@@ -409,6 +409,7 @@ def get_player(player_id):
 
 
 @app.route('/api/players', methods=['POST'])
+@requires_admin
 def add_player():
     d = request.get_json(silent=True) or {}
     pid   = (d.get('playerID')          or '').strip().upper()
@@ -431,6 +432,7 @@ def add_player():
 
 
 @app.route('/api/players/<player_id>', methods=['PUT'])
+@requires_admin
 def update_player(player_id):
     d = request.get_json(silent=True) or {}
     with get_db() as conn:
@@ -450,6 +452,7 @@ def update_player(player_id):
 
 
 @app.route('/api/players/<player_id>', methods=['DELETE'])
+@requires_admin
 def delete_player(player_id):
     with get_db() as conn:
         r = conn.execute('DELETE FROM Players WHERE playerID=?', (player_id,))
@@ -468,6 +471,7 @@ def get_teams():
     return jsonify([dict(r) for r in rows])
 
 @app.route('/api/teams', methods=['POST'])
+@requires_admin
 def add_team():
     d = request.get_json(silent=True) or {}
     tname = (d.get('teamName') or '').strip()
@@ -562,6 +566,7 @@ def get_match(match_id):
 
 
 @app.route('/api/matches', methods=['POST'])
+@requires_admin
 def add_match():
     d = request.get_json(silent=True) or {}
     required = ['matchID','tournamentName','matchFormat','matchType',
@@ -587,6 +592,7 @@ def add_match():
     return jsonify({'message': 'Match created', 'matchID': d['matchID']}), 201
 
 @app.route('/api/matches/<int:match_id>/xi', methods=['POST'])
+@requires_admin
 def add_playing_xi(match_id):
     d = request.get_json(silent=True) or {}
     players = d.get('players', [])
@@ -596,13 +602,20 @@ def add_playing_xi(match_id):
         with get_db() as conn:
             # Delete any existing XI for this match
             conn.execute('DELETE FROM PlayingXI WHERE matchID=?', (match_id,))
-            for pid in players:
-                conn.execute('INSERT INTO PlayingXI (matchID, playerID) VALUES (?, ?)', (match_id, pid))
+            for p in players:
+                if isinstance(p, dict):
+                    pid = p.get('playerID')
+                    role = p.get('matchRole')
+                else:
+                    pid = p
+                    role = None
+                conn.execute('INSERT INTO PlayingXI (matchID, playerID, matchRole) VALUES (?, ?, ?)', (match_id, pid, role))
     except Exception as e:
         return jsonify({'error': str(e)}), 400
     return jsonify({'message': 'Playing XI saved', 'matchID': match_id}), 201
 
 @app.route('/api/matches/<int:match_id>', methods=['DELETE'])
+@requires_admin
 def delete_match(match_id):
     with get_db() as conn:
         conn.execute('DELETE FROM BallByBall WHERE matchID=?', (match_id,))
@@ -629,6 +642,7 @@ def get_tournaments():
     return jsonify(t_list)
 
 @app.route('/api/tournaments', methods=['POST'])
+@requires_admin
 def create_tournament():
     d = request.get_json(silent=True) or {}
     name   = (d.get('tournamentName') or '').strip()
@@ -650,6 +664,7 @@ def create_tournament():
         return jsonify({'error': 'Tournament name might already exist'}), 400
 
 @app.route('/api/tournaments/<path:name>', methods=['DELETE'])
+@requires_admin
 def delete_tournament(name):
     try:
         with get_db() as conn:
@@ -694,6 +709,7 @@ def get_tournament_squads(name):
     return jsonify(squads)
 
 @app.route('/api/tournaments/<name>/squad', methods=['POST'])
+@requires_admin
 def save_tournament_squad(name):
     data = request.get_json(silent=True) or {}
     squad_list = data.get('squads') or [] # list of {teamName: ..., playerID: ...}
@@ -979,6 +995,7 @@ def get_ball_state(match_id):
 
 
 @app.route('/api/balls', methods=['POST'])
+@requires_admin
 def add_ball():
     """Record a single delivery and update match totals."""
     d = request.get_json(silent=True) or {}
@@ -1041,6 +1058,7 @@ def add_ball():
 
 
 @app.route('/api/balls/<int:ball_id>', methods=['PUT'])
+@requires_admin
 def update_ball(ball_id):
     """Update a single delivery and update match totals."""
     d = request.get_json(silent=True) or {}
@@ -1101,6 +1119,7 @@ def update_ball(ball_id):
 
 
 @app.route('/api/balls/<int:ball_id>', methods=['DELETE'])
+@requires_admin
 def delete_ball(ball_id):
     """Undo the last ball entry."""
     try:

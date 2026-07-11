@@ -40,7 +40,7 @@ function toggleForm() {
 
 async function loadTeamsOptions() {
     try {
-        const res = await fetch(`${API}/api/teams`);
+        const res = await authFetch(`${API}/api/teams`);
         const teams = await res.json();
         const grid = document.getElementById('t-teams-grid');
         grid.innerHTML = teams.map(t => `
@@ -56,7 +56,7 @@ async function loadTeamsOptions() {
 
 async function loadTournaments() {
     try {
-        const res = await fetch(`${API}/api/tournaments`);
+        const res = await authFetch(`${API}/api/tournaments`);
         const data = await res.json();
         const tbodyRunning = document.getElementById('tournaments-running');
         const tbodyCompleted = document.getElementById('tournaments-completed');
@@ -80,8 +80,10 @@ async function loadTournaments() {
                 <td>${t.overs}</td>
                 <td style="font-size:0.85rem; color:var(--text-muted);">${(t.teams || []).join(', ') || 'None'}</td>
                 <td style="display:flex; gap:0.4rem; justify-content:center;">
+                    ${getUser()?.isAdmin ? `
                     <button class="btn-view" style="font-size: 0.75rem;" onclick="startSquadSelection('${t.tournamentName.replace(/'/g, "\\'")}', ${JSON.stringify(t.teams || []).replace(/"/g, '&quot;')})">Manage Squads</button>
                     <button class="btn-delete" style="font-size: 0.75rem; padding: 0.4rem;" onclick="deleteTournament('${t.tournamentName.replace(/'/g, "\\'")}')">🗑</button>
+                    ` : ''}
                 </td>            `;
             
             if (isCompleted) {
@@ -102,7 +104,7 @@ async function loadTournaments() {
 async function deleteTournament(name) {
     if(!confirm(`Are you sure you want to delete ${name}?`)) return;
     try {
-        const res = await fetch(`${API}/api/tournaments/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const res = await authFetch(`${API}/api/tournaments/${encodeURIComponent(name)}`, { method: 'DELETE' });
         if(res.ok) {
             showToast('Tournament deleted', 'success');
             loadTournaments();
@@ -127,7 +129,7 @@ async function saveTournament(e) {
     };
 
     try {
-        const res = await fetch(`${API}/api/tournaments`, {
+        const res = await authFetch(`${API}/api/tournaments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -166,10 +168,10 @@ async function startSquadSelection(tournamentName, teams) {
     document.getElementById('squadModalTitle').textContent = `Select Squads for ${tournamentName}`;
     
     try {
-        const res = await fetch(`${API}/api/players/by_team`);
+        const res = await authFetch(`${API}/api/players/by_team`);
         playersByTeam = await res.json();
         
-        const squadRes = await fetch(`${API}/api/tournaments/${encodeURIComponent(tournamentName)}/squad`);
+        const squadRes = await authFetch(`${API}/api/tournaments/${encodeURIComponent(tournamentName)}/squad`);
         const squadData = await squadRes.json();
         // squadData is { 'TeamName': [players...], ... }
         existingSquad = Object.values(squadData).flat().map(s => s.playerID);
@@ -247,7 +249,7 @@ function nextSquadTeam() {
 
 async function submitAllSquads() {
     try {
-        const res = await fetch(`${API}/api/tournaments/${encodeURIComponent(currentTournamentForSquads)}/squad`, {
+        const res = await authFetch(`${API}/api/tournaments/${encodeURIComponent(currentTournamentForSquads)}/squad`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ squads: finalSquadSelection })
