@@ -1,3 +1,13 @@
+
+async function authFetch(url, options = {}) {
+    const user = getUser();
+    const headers = options.headers || {};
+    if (user && user.email) {
+        headers['X-User-Email'] = user.email;
+    }
+    return fetch(url, { ...options, headers });
+}
+
 // matches.js — CricketStats Pro | Matches Page + Ball-by-Ball Entry
 
 const API = 'http://localhost:5001';
@@ -181,7 +191,7 @@ function renderScorecard(data) {
     renderBatTable('inn2-bat-body', data.innings2Bat);
     renderBowlTable('inn1-bowl-body', data.innings1Bowl);
     renderBowlTable('inn2-bowl-body', data.innings2Bowl);
-    renderXITable('xi-body', data.playingXI || []);
+    renderXIBoxes(data.match.team1, data.team1XI || [], data.match.team2, data.team2XI || []);
     switchInnings(1);
 }
 
@@ -227,20 +237,36 @@ function renderBowlTable(tbId, rows) {
     }).join('');
 }
 
-function renderXITable(tbId, rows) {
-    const tb = document.getElementById(tbId);
-    if (!tb) return;
-    if (!rows.length) {
-        tb.innerHTML = `<tr><td colspan="4" class="empty-state">No Playing XI data.</td></tr>`;
-        return;
-    }
-    const cls = { Batsman:'badge-batsman', Bowler:'badge-bowler', AllRounder:'badge-allrounder', WicketKeeper:'badge-keeper' };
-    tb.innerHTML = rows.map(r => `<tr>
-        <td><strong>${r.playerName}</strong></td>
-        <td style="font-size:0.8rem;">${r.playerNationality || '—'}</td>
-        <td><span class="badge ${cls[r.playerRole]||'badge-batsman'}">${r.playerRole}</span></td>
-        <td><span class="badge badge-odi">${r.matchRole}</span></td>
-    </tr>`).join('');
+function renderXIBoxes(team1Name, team1Rows, team2Name, team2Rows) {
+    const list1 = document.getElementById('xi-team1-list');
+    const list2 = document.getElementById('xi-team2-list');
+    const name1 = document.getElementById('xi-team1-name');
+    const name2 = document.getElementById('xi-team2-name');
+    
+    if (name1) name1.textContent = team1Name;
+    if (name2) name2.textContent = team2Name;
+
+    const renderList = (rows, listEl) => {
+        if (!listEl) return;
+        if (!rows || !rows.length) {
+            listEl.innerHTML = `<li style="padding:0.5rem 0; color:var(--text-muted); text-align:center;">No Playing XI Data</li>`;
+            return;
+        }
+        
+        listEl.innerHTML = rows.map(r => {
+            let roleTag = '';
+            if (r.matchRole === 'Captain') roleTag = ' <span style="color:var(--gold-bright); font-weight:bold; font-size:0.8rem;">(C)</span>';
+            else if (r.matchRole === 'WicketKeeper') roleTag = ' <span style="color:#86efac; font-weight:bold; font-size:0.8rem;">(WK)</span>';
+            else if (r.matchRole === 'Captain & WK') roleTag = ' <span style="color:var(--gold-bright); font-weight:bold; font-size:0.8rem;">(C & WK)</span>';
+            
+            return `<li style="padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.95rem;">${r.playerName}${roleTag}</span>
+            </li>`;
+        }).join('');
+    };
+
+    renderList(team1Rows, list1);
+    renderList(team2Rows, list2);
 }
 
 function switchInnings(tab) {

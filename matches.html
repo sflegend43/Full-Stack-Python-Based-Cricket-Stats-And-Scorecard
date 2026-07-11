@@ -151,13 +151,23 @@
             </div>
 
             <!-- Playing XI -->
-            <div id="xi-card" class="glass-card" style="display:none;">
-                <h3>👥 Playing XI</h3>
-                <div class="table-scroll">
-                    <table>
-                        <thead><tr><th>Name</th><th>Nationality</th><th>Role</th><th>Match Role</th></tr></thead>
-                        <tbody id="xi-body"></tbody>
-                    </table>
+            <div id="xi-card" class="glass-card" style="display:none; padding:1.5rem;">
+                <h3 style="text-align:center; margin-bottom:1.5rem;">👥 Playing XI</h3>
+                <div style="display: flex; gap: 2rem; justify-content: space-between; flex-wrap: wrap;">
+                    <!-- Team 1 Box -->
+                    <div style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
+                        <h4 id="xi-team1-name" style="text-align:center; color:var(--primary-light); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem;">Team 1</h4>
+                        <ul id="xi-team1-list" style="list-style: none; padding: 0; margin: 0;">
+                            <!-- JS will populate -->
+                        </ul>
+                    </div>
+                    <!-- Team 2 Box -->
+                    <div style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
+                        <h4 id="xi-team2-name" style="text-align:center; color:var(--primary-light); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem;">Team 2</h4>
+                        <ul id="xi-team2-list" style="list-style: none; padding: 0; margin: 0;">
+                            <!-- JS will populate -->
+                        </ul>
+                    </div>
                 </div>
             </div>
 

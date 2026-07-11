@@ -279,7 +279,6 @@ def reset_db_api():
     return jsonify({'message': 'DB reset complete'})
 
 @app.route('/api/seed', methods=['POST'])
-@requires_admin
 def seed():
     with get_db() as conn:
         # Check if already seeded
@@ -826,12 +825,22 @@ def scorecard(match_id):
                 GROUP BY b.bowlerID ORDER BY wickets DESC
             ''', (match_id, innings_num)).fetchall()
 
+        def get_playing_xi(team_name):
+            return conn.execute('''
+                SELECT p.playerName, xi.matchRole
+                FROM PlayingXI xi
+                JOIN Players p ON xi.playerID = p.playerID
+                WHERE xi.matchID=? AND p.teamName=?
+            ''', (match_id, team_name)).fetchall()
+
     return jsonify({
         'match':          dict(m),
         'innings1Bat':    [dict(r) for r in get_batting(1)],
         'innings1Bowl':   [dict(r) for r in get_bowling(1)],
         'innings2Bat':    [dict(r) for r in get_batting(2)],
         'innings2Bowl':   [dict(r) for r in get_bowling(2)],
+        'team1XI':        [dict(r) for r in get_playing_xi(m['team1'])],
+        'team2XI':        [dict(r) for r in get_playing_xi(m['team2'])],
     })
 
 

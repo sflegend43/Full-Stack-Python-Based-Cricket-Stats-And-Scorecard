@@ -1,3 +1,13 @@
+
+async function authFetch(url, options = {}) {
+    const user = getUser();
+    const headers = options.headers || {};
+    if (user && user.email) {
+        headers['X-User-Email'] = user.email;
+    }
+    return fetch(url, { ...options, headers });
+}
+
 // teams.js — CricketStats Pro | Teams Page Logic
 
 const API = 'http://localhost:5001';
