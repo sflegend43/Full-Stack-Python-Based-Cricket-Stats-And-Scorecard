@@ -107,6 +107,7 @@ def init_db():
                 matchDate          TEXT,
                 winnerName         TEXT,
                 tossWinnerName     TEXT,
+                tossDecision       TEXT,
                 winMargin          TEXT,
                 onFieldUmpire1ID   INTEGER NOT NULL,
                 onFieldUmpire2ID   INTEGER NOT NULL,
@@ -188,6 +189,16 @@ def init_db():
             );
         ''')
 
+        # Migrations
+        try:
+            conn.execute('ALTER TABLE Matches ADD COLUMN tossDecision TEXT')
+        except sqlite3.OperationalError:
+            pass # column already exists
+            
+        try:
+            conn.execute('ALTER TABLE PlayingXI ADD COLUMN teamName TEXT')
+        except sqlite3.OperationalError:
+            pass # column already exists
 
 # ─────────────────────────────────────────────────────
 # Static Page Routes
@@ -578,12 +589,12 @@ def add_match():
             conn.execute('''INSERT INTO Matches
                 (matchID,tournamentName,matchFormat,matchType,isDayNight,
                  team1Name,team2Name,venueID,matchDate,winnerName,tossWinnerName,
-                 winMargin,onFieldUmpire1ID,onFieldUmpire2ID,thirdUmpireID)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                 tossDecision,winMargin,onFieldUmpire1ID,onFieldUmpire2ID,thirdUmpireID)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
                 d['matchID'], d['tournamentName'], d['matchFormat'], d['matchType'],
                 d.get('isDayNight', 0), d['team1Name'], d['team2Name'], d['venueID'],
                 d.get('matchDate'), d.get('winnerName'), d.get('tossWinnerName'),
-                d.get('winMargin'), d['onFieldUmpire1ID'], d['onFieldUmpire2ID'],
+                d.get('tossDecision'), d.get('winMargin'), d['onFieldUmpire1ID'], d['onFieldUmpire2ID'],
                 d.get('thirdUmpireID')
             ))
     except sqlite3.IntegrityError as e:
@@ -605,10 +616,12 @@ def add_playing_xi(match_id):
                 if isinstance(p, dict):
                     pid = p.get('playerID')
                     role = p.get('matchRole')
+                    team_name = p.get('teamName')
                 else:
                     pid = p
                     role = None
-                conn.execute('INSERT INTO PlayingXI (matchID, playerID, matchRole) VALUES (?, ?, ?)', (match_id, pid, role))
+                    team_name = None
+                conn.execute('INSERT INTO PlayingXI (matchID, playerID, matchRole, teamName) VALUES (?, ?, ?, ?)', (match_id, pid, role, team_name))
     except Exception as e:
         return jsonify({'error': str(e)}), 400
     return jsonify({'message': 'Playing XI saved', 'matchID': match_id}), 201
@@ -991,12 +1004,40 @@ def get_ball_state(match_id):
         over      = 1
         next_ball = 1
 
+    batting_team = None
+    bowling_team = None
+    if match:
+        toss_winner = match['tossWinnerName']
+        toss_decision = match['tossDecision'] # Bat or Bowl
+        team1 = match['team1Name']
+        team2 = match['team2Name']
+        other_team = team2 if toss_winner == team1 else team1
+
+        if toss_decision == 'Bat':
+            inn1_bat = toss_winner
+            inn1_bowl = other_team
+        elif toss_decision == 'Bowl':
+            inn1_bat = other_team
+            inn1_bowl = toss_winner
+        else:
+            inn1_bat = team1
+            inn1_bowl = team2
+            
+        if innings == 1:
+            batting_team = inn1_bat
+            bowling_team = inn1_bowl
+        else:
+            batting_team = inn1_bowl
+            bowling_team = inn1_bat
+
     return jsonify({
         'nextOver':    over,
         'nextBall':    next_ball,
         'totalRuns':   agg['totalRuns']  or 0,
         'wickets':     agg['wickets']    or 0,
         'legalBalls':  agg['legalBalls'] or 0,
+        'battingTeam': batting_team,
+        'bowlingTeam': bowling_team,
         'players':     [dict(r) for r in xi],
         'match':       dict(match) if match else {},
     })

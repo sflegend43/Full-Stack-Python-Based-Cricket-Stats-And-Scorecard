@@ -674,6 +674,7 @@ async function handleMatchWizard(e) {
         venueID:          parseInt(document.getElementById('m-venue').value),
         matchDate:        document.getElementById('m-date').value || null,
         tossWinnerName:   document.getElementById('m-toss-winner').value,
+        tossDecision:     document.getElementById('m-toss-decision').value,
         onFieldUmpire1ID: parseInt(document.getElementById('m-ump1').value),
         onFieldUmpire2ID: parseInt(document.getElementById('m-ump2').value),
     };
@@ -722,12 +723,15 @@ async function openBallEntry() {
         
         lsCurrentOver = data.nextOver || 1;
         lsCurrentBall = data.nextBall || 1;
+        
+        if (data.battingTeam) {
+            currentBattingTeam = data.battingTeam;
+        }
+        
         updateScoreboardStrip(data.totalRuns, data.wickets, lsCurrentOver, lsCurrentBall);
 
         if (lsCurrentOver === 1 && lsCurrentBall === 1) {
             openContextModal('innings_start');
-        } else {
-            // Restore from state if possible, otherwise we rely on currentStriker/currentBowler globals
         }
         
         lsRefreshStats();
@@ -778,7 +782,7 @@ function getMatchTeams() {
 function filterContextPlayers() {
     const teams = getMatchTeams();
     if (!currentBattingTeam && teams.length > 0) {
-        currentBattingTeam = document.getElementById('ctx-batting-team').value || teams[0];
+        currentBattingTeam = teams[0];
     }
     const bowlingTeam = teams.find(t => t !== currentBattingTeam) || teams[0];
 
@@ -795,11 +799,6 @@ function filterContextPlayers() {
     document.getElementById('ctx-bowler').innerHTML = bowlOpts || batOpts || `<option value="">No bowlers found</option>`;
 }
 
-function onBattingTeamChange() {
-    currentBattingTeam = document.getElementById('ctx-batting-team').value;
-    filterContextPlayers();
-}
-
 function openContextModal(mode, isEndOver = false) {
     contextMode = mode;
     wicketAtEndOver = isEndOver;
@@ -808,27 +807,13 @@ function openContextModal(mode, isEndOver = false) {
     const strikerDiv = document.getElementById('contextStrikerContainer');
     const nonStrikerDiv = document.getElementById('contextNonStrikerContainer');
     const bowlerDiv = document.getElementById('contextBowlerContainer');
-    const batTeamDiv = document.getElementById('contextBattingTeamContainer');
-
-    // Deduce batting team if already playing
-    if (currentStriker) {
-        const p = bePlayers.find(x => x.playerID === currentStriker);
-        if (p && p.teamName) currentBattingTeam = p.teamName;
-    }
 
     if (mode === 'innings_start') {
         title.innerHTML = '🏏 Innings Start';
-        batTeamDiv.style.display = 'block';
         strikerDiv.style.display = 'block';
         nonStrikerDiv.style.display = 'block';
         bowlerDiv.style.display = 'block';
-        
-        const teams = getMatchTeams();
-        document.getElementById('ctx-batting-team').innerHTML = teams.map(t => `<option value="${t}">${t}</option>`).join('');
-        if (teams.length > 0 && !currentBattingTeam) currentBattingTeam = teams[0];
-        if (currentBattingTeam) document.getElementById('ctx-batting-team').value = currentBattingTeam;
     } else {
-        batTeamDiv.style.display = 'none';
         if (mode === 'new_over' || mode === 'end_over') {
             title.innerHTML = '🔄 Select New Bowler';
             strikerDiv.style.display = 'none';
@@ -846,6 +831,7 @@ function openContextModal(mode, isEndOver = false) {
             bowlerDiv.style.display = 'block';
         }
     }
+
 
     filterContextPlayers();
 
@@ -1445,6 +1431,7 @@ async function handleMatchWizard(e) {
         venueID:          parseInt(document.getElementById('m-venue').value),
         matchDate:        document.getElementById('m-date').value || null,
         tossWinnerName:   document.getElementById('m-toss-winner').value,
+        tossDecision:     document.getElementById('m-toss-decision').value,
         onFieldUmpire1ID: parseInt(document.getElementById('m-ump1').value),
         onFieldUmpire2ID: parseInt(document.getElementById('m-ump2').value),
     };
