@@ -827,10 +827,11 @@ def scorecard(match_id):
 
         def get_playing_xi(team_name):
             return conn.execute('''
-                SELECT p.playerName, xi.matchRole
+                SELECT p.playerName, p.playerRole, p.battingStyle, p.bowlingStyle, xi.matchRole
                 FROM PlayingXI xi
                 JOIN Players p ON xi.playerID = p.playerID
-                WHERE xi.matchID=? AND p.teamName=?
+                JOIN Squad s ON p.playerID = s.playerID
+                WHERE xi.matchID=? AND s.teamName=?
             ''', (match_id, team_name)).fetchall()
 
     return jsonify({
@@ -839,8 +840,8 @@ def scorecard(match_id):
         'innings1Bowl':   [dict(r) for r in get_bowling(1)],
         'innings2Bat':    [dict(r) for r in get_batting(2)],
         'innings2Bowl':   [dict(r) for r in get_bowling(2)],
-        'team1XI':        [dict(r) for r in get_playing_xi(m['team1'])],
-        'team2XI':        [dict(r) for r in get_playing_xi(m['team2'])],
+        'team1XI':        [dict(r) for r in get_playing_xi(m['team1Name'])],
+        'team2XI':        [dict(r) for r in get_playing_xi(m['team2Name'])],
     })
 
 
@@ -972,7 +973,7 @@ def get_ball_state(match_id):
 
         # playing XI for this match (both teams)
         xi = conn.execute('''
-            SELECT px.playerID, p.playerName, p.playerRole,
+            SELECT px.playerID, p.playerName, p.playerRole, px.teamName,
                    CASE WHEN p.playerRole IN ('Batsman','AllRounder','WicketKeeper') THEN 1 ELSE 0 END AS canBat,
                    CASE WHEN p.playerRole IN ('Bowler','AllRounder') THEN 1 ELSE 0 END AS canBowl
             FROM PlayingXI px JOIN Players p ON px.playerID = p.playerID
@@ -982,12 +983,10 @@ def get_ball_state(match_id):
 
         match = conn.execute('SELECT * FROM Matches WHERE matchID=?', (match_id,)).fetchone()
 
-    if last:
-        next_ball = last['ballNumber'] + 1
-        over      = last['overNumber']
-        if next_ball > 6:
-            over      += 1
-            next_ball  = 1
+    if agg and agg['legalBalls'] is not None:
+        legal = int(agg['legalBalls'])
+        over = (legal // 6) + 1
+        next_ball = (legal % 6) + 1
     else:
         over      = 1
         next_ball = 1
@@ -1273,7 +1272,8 @@ def not_found(e):
 
 @app.errorhandler(500)
 def server_error(e):
-    return jsonify({'error': 'Internal server error'}), 500
+    import traceback
+    return jsonify({'error': 'Internal server error', 'traceback': traceback.format_exc()}), 500
 
 
 # ─────────────────────────────────────────────────────

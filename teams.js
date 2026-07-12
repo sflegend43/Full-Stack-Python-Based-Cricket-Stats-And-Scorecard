@@ -110,7 +110,7 @@ function renderTeams(teams) {
         return;
     }
     tb.innerHTML = teams.map(t => {
-        const flagUrl = `https://flagcdn.com/32x24/${getCountryCode(t.countryName)}.png`;
+        const flagUrl = `https://flagcdn.com/32x24/${getCountryCode(t.country)}.png`;
         return `
         <tr>
             <td>${rankBadge(t.ranking)}</td>
@@ -125,10 +125,10 @@ function renderTeams(teams) {
             <td>
                 <div style="display:flex; align-items:center; gap:0.5rem;">
                     <img src="${flagUrl}" style="height:18px; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,0.3);" onerror="this.style.display='none'">
-                    <span style="font-weight: 500;">${t.countryName}</span>
+                    <span style="font-weight: 500;">${t.country}</span>
                 </div>
             </td>
-            <td><strong style="color:var(--gold);">🏏 ${t.captainID || '—'}</strong></td>
+            <td><strong style="color:var(--gold);">🏏 ${t.teamCaptain || '—'}</strong></td>
             <td style="color:var(--text-muted); font-size:0.85rem;">${t.headCoach || '—'}</td>
             <td>
                 <button class="btn-view" onclick="viewTeam('${encodeURIComponent(t.teamName)}')">👥 View Roster</button>

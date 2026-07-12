@@ -83,12 +83,20 @@ async function loadTournaments() {
         data.forEach(t => {
             const isCompleted = t.tournamentName.includes('2023') || t.tournamentName.includes('2022'); // Basic mock for completed
             const tr = document.createElement('tr');
+            
+            const teamsHtml = (t.teams || []).map(team => `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <span>${team}</span>
+                    <button class="btn-view" style="padding:2px 6px; font-size:0.7rem;" onclick="viewTournamentSquad('${t.tournamentName.replace(/'/g, "\\'")}', '${team.replace(/'/g, "\\'")}')">View</button>
+                </div>
+            `).join('') || 'None';
+
             tr.innerHTML = `
                 <td style="font-weight:600; color:var(--primary-light);">${t.tournamentName}</td>
                 <td><span class="badge ${t.format==='ODI'?'badge-odi':(t.format==='T20'?'badge-t20':'badge-test')}">${t.format}</span></td>
                 <td>${t.totalTeams}</td>
                 <td>${t.overs}</td>
-                <td style="font-size:0.85rem; color:var(--text-muted);">${(t.teams || []).join(', ') || 'None'}</td>
+                <td style="font-size:0.85rem; color:var(--text-muted); min-width:200px;">${teamsHtml}</td>
                 <td style="display:flex; gap:0.4rem; justify-content:center;">
                     ${getUser()?.isAdmin ? `
                     <button class="btn-view" style="font-size: 0.75rem;" onclick="startSquadSelection('${t.tournamentName.replace(/'/g, "\\'")}', ${JSON.stringify(t.teams || []).replace(/"/g, '&quot;')})">Manage Squads</button>
@@ -275,5 +283,34 @@ async function submitAllSquads() {
         }
     } catch {
         showToast('Network error while saving squads', 'error');
+    }
+}
+
+async function viewTournamentSquad(tournamentName, teamName) {
+    try {
+        const res = await authFetch(`${API}/api/tournaments/${encodeURIComponent(tournamentName)}/squad`);
+        const squadData = await res.json();
+        const players = squadData[teamName] || [];
+        
+        document.getElementById('viewSquadModalTitle').textContent = `${teamName} Squad - ${tournamentName}`;
+        
+        const content = document.getElementById('viewSquadContent');
+        if (players.length === 0) {
+            content.innerHTML = `<p style="color:var(--text-muted); padding: 2rem; text-align:center;">Squad has not been selected for this tournament yet.</p>`;
+        } else {
+            content.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;">
+                    ${players.map(p => `
+                        <div class="glass-card" style="padding: 1rem; border: 1px solid rgba(255,255,255,0.1);">
+                            <div style="font-weight: 600; font-size: 0.95rem;">${p.playerName}</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">${p.playerRole}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        document.getElementById('viewSquadModal').style.display = 'flex';
+    } catch {
+        showToast('Failed to load squad', 'error');
     }
 }
