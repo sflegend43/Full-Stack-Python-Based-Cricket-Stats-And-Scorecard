@@ -8,24 +8,52 @@ from flask import Flask, request, jsonify, send_from_directory
 import sqlite3
 import os
 import time
+import secrets
 from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # ─────────────────────────────────────────────────────
-# Auth Decorator
+# Password helpers (with legacy plaintext migration support)
 # ─────────────────────────────────────────────────────
+def verify_password(stored, provided):
+    """Verify a password against a hash. Falls back to a plain-text
+    comparison for accounts created before password hashing was added."""
+    try:
+        if check_password_hash(stored, provided):
+            return True
+    except (ValueError, TypeError):
+        pass
+    return stored == provided
+
+
+def is_hashed(value):
+    return isinstance(value, str) and value.count('$') >= 2
+
+
+# ─────────────────────────────────────────────────────
+# Auth Decorator — token-based (NOT a spoofable client header)
+# ─────────────────────────────────────────────────────
+def get_bearer_token():
+    header = request.headers.get('Authorization', '')
+    if header.lower().startswith('bearer '):
+        return header[7:].strip()
+    return ''
+
+
+def get_current_user():
+    token = get_bearer_token()
+    if not token:
+        return None
+    with get_db() as conn:
+        return conn.execute('SELECT * FROM users WHERE token = ?', (token,)).fetchone()
+
+
 def requires_admin(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        email = request.headers.get('X-User-Email', '').lower()
-        if not email:
-            return jsonify({'error': 'Unauthorized: Admin access required'}), 403
-            
-        with get_db() as conn:
-            user = conn.execute('SELECT isAdmin FROM users WHERE email = ?', (email,)).fetchone()
-            
+        user = get_current_user()
         if not user or not user['isAdmin']:
             return jsonify({'error': 'Unauthorized: Admin access required'}), 403
-            
         return f(*args, **kwargs)
     return decorated_function
 
@@ -200,6 +228,11 @@ def init_db():
         except sqlite3.OperationalError:
             pass # column already exists
 
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN token TEXT')
+        except sqlite3.OperationalError:
+            pass # column already exists
+
 # ─────────────────────────────────────────────────────
 # Static Page Routes
 # ─────────────────────────────────────────────────────
@@ -233,17 +266,19 @@ def signup():
 
     is_admin = 0
     if role == 'admin':
-        if adminKey != 'CRICKET_ADMIN_2026':
+        admin_key_expected = os.environ.get('CRICKET_ADMIN_KEY', 'CRICKET_ADMIN_2026')
+        if adminKey != admin_key_expected:
             return jsonify({'error': 'Invalid Admin Registration Key'}), 403
         is_admin = 1
 
+    token = secrets.token_hex(32)
     try:
         with get_db() as conn:
             conn.execute(
-                'INSERT INTO users (fullname, email, password, isAdmin) VALUES (?, ?, ?, ?)',
-                (fullname, email, password, is_admin)
+                'INSERT INTO users (fullname, email, password, isAdmin, token) VALUES (?, ?, ?, ?, ?)',
+                (fullname, email, generate_password_hash(password), is_admin, token)
             )
-        return jsonify({'message': 'Account created successfully', 'user': {'fullname': fullname, 'email': email, 'isAdmin': bool(is_admin)}}), 201
+        return jsonify({'message': 'Account created successfully', 'user': {'fullname': fullname, 'email': email, 'isAdmin': bool(is_admin), 'token': token}}), 201
     except sqlite3.IntegrityError:
         return jsonify({'error': 'Email already registered. Please log in instead.'}), 400
 
@@ -258,16 +293,25 @@ def login():
         return jsonify({'error': 'Email and password are required'}), 400
 
     with get_db() as conn:
-        user = conn.execute(
-            'SELECT * FROM users WHERE email = ? AND password = ?',
-            (email, password)
-        ).fetchone()
+        user = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
 
-    if not user:
-        return jsonify({'error': 'Invalid email or password'}), 401
+        if not user or not verify_password(user['password'], password):
+            return jsonify({'error': 'Invalid email or password'}), 401
+
+        token = secrets.token_hex(32)
+        updates = {'token': token}
+        if not is_hashed(user['password']):
+            # Self-heal legacy plaintext passwords into hashed ones
+            updates['password'] = generate_password_hash(password)
+
+        if 'password' in updates:
+            conn.execute('UPDATE users SET token=?, password=? WHERE id=?',
+                         (updates['token'], updates['password'], user['id']))
+        else:
+            conn.execute('UPDATE users SET token=? WHERE id=?', (updates['token'], user['id']))
 
     is_admin = bool(user['isAdmin']) if 'isAdmin' in user.keys() else False
-    return jsonify({'user': {'fullname': user['fullname'], 'email': user['email'], 'isAdmin': is_admin}})
+    return jsonify({'user': {'fullname': user['fullname'], 'email': user['email'], 'isAdmin': is_admin, 'token': token}})
 
 
 import seed_data
@@ -276,6 +320,7 @@ import seed_data
 # SEED API — Populates all data from the SQL schema
 # ─────────────────────────────────────────────────────
 @app.route('/api/dev/reset', methods=['POST'])
+@requires_admin
 def reset_db_api():
     with get_db() as conn:
         cursor = conn.cursor()
@@ -465,9 +510,22 @@ def update_player(player_id):
 @requires_admin
 def delete_player(player_id):
     with get_db() as conn:
-        r = conn.execute('DELETE FROM Players WHERE playerID=?', (player_id,))
-        if r.rowcount == 0:
+        existing = conn.execute('SELECT 1 FROM Players WHERE playerID=?', (player_id,)).fetchone()
+        if not existing:
             return jsonify({'error': 'Player not found'}), 404
+
+        played = conn.execute('''
+            SELECT 1 FROM BallByBall
+            WHERE batsmanID=? OR bowlerID=? OR dismissedPlayerID=? LIMIT 1
+        ''', (player_id, player_id, player_id)).fetchone()
+        if played:
+            return jsonify({'error': 'Cannot delete: player has recorded ball-by-ball match statistics'}), 400
+
+        # Remove dependent rows first to satisfy foreign-key constraints
+        conn.execute('DELETE FROM Squad WHERE playerID=?', (player_id,))
+        conn.execute('DELETE FROM PlayingXI WHERE playerID=?', (player_id,))
+        conn.execute('DELETE FROM TournamentSquad WHERE playerID=?', (player_id,))
+        conn.execute('DELETE FROM Players WHERE playerID=?', (player_id,))
     return jsonify({'message': 'Player deleted'})
 
 
@@ -492,12 +550,15 @@ def add_team():
     if not tname:
         return jsonify({'error': 'teamName is required'}), 400
 
+    if not country:
+        return jsonify({'error': 'countryName is required'}), 400
+
     try:
         with get_db() as conn:
             # Assign ranking as next integer
             curr_rank = conn.execute('SELECT MAX(ranking) as m FROM Team').fetchone()['m'] or 0
-            conn.execute('INSERT INTO Team (teamName, ranking, countryName, headCoach, captainID) VALUES (?,?,?,?,?)',
-                         (tname, curr_rank + 1, country, coach, captain))
+            conn.execute('INSERT INTO Team (teamName, country, headCoach, teamCaptain, ranking) VALUES (?,?,?,?,?)',
+                         (tname, country, coach, captain, curr_rank + 1))
     except sqlite3.IntegrityError:
         return jsonify({'error': 'Team already exists'}), 400
     return jsonify({'message': 'Team created', 'teamName': tname}), 201
@@ -1313,8 +1374,8 @@ def not_found(e):
 
 @app.errorhandler(500)
 def server_error(e):
-    import traceback
-    return jsonify({'error': 'Internal server error', 'traceback': traceback.format_exc()}), 500
+    app.logger.exception('Unhandled server error')
+    return jsonify({'error': 'Internal server error'}), 500
 
 
 # ─────────────────────────────────────────────────────

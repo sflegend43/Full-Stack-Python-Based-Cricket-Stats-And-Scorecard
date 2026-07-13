@@ -2,8 +2,8 @@
 async function authFetch(url, options = {}) {
     const user = getUser();
     const headers = options.headers || {};
-    if (user && user.email) {
-        headers['X-User-Email'] = user.email;
+    if (user && user.token) {
+        headers['Authorization'] = `Bearer ${user.token}`;
     }
     return fetch(url, { ...options, headers });
 }
