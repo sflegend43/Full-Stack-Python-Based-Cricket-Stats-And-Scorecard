@@ -164,7 +164,8 @@ function renderPlayers(groupedPlayers, totalCount) {
             
             // Generate a CREX-style 2D vector illustration wearing the team's color
             const shirtColor = TEAM_COLORS[team] || 'aaaaaa';
-            const avatarUrl = `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(p.playerName)}&clothing=shirtCrewNeck,graphicShirt,blazerAndShirt&clothingColor=${shirtColor}&skinColor=f8d25c,ffdbb4,edb98a,d08b5b,ae5d29,391206&backgroundColor=e2e8f0,f8fafc`;
+            const avatarUrl = `Players Pics/${encodeURIComponent(p.playerName)}.png`;
+            const fbUrl = `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(p.playerName)}&clothing=shirtCrewNeck,graphicShirt,blazerAndShirt&clothingColor=${shirtColor}&skinColor=f8d25c,ffdbb4,edb98a,d08b5b,ae5d29,391206&backgroundColor=e2e8f0,f8fafc`;
 
             html += `
             <div class="player-card role-${rc}">
@@ -265,7 +266,7 @@ function closeEditModal() {
 
 // ─── Delete ───
 async function deletePlayer(pid, name) {
-    if (!confirm(`Delete player "${name}"? This cannot be undone.`)) return;
+    if (!await customConfirm(`Delete player "${name}"? This cannot be undone.`)) return;
     try {
         const res = await authFetch(`${API}/api/players/${pid}`, { method: 'DELETE' });
         const data = await res.json();
@@ -350,3 +351,30 @@ function setupForms() {
         if (e.target === this) this.style.display = 'none';
     });
 });
+
+// ─── Custom Confirm Modal ───
+function customConfirm(msg) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'custom-confirm-overlay';
+        overlay.innerHTML = `
+            <div class="custom-confirm-card">
+                <p>${msg}</p>
+                <div class="custom-confirm-actions">
+                    <button class="btn-cancel" id="cc-cancel">Cancel</button>
+                    <button class="btn-submit flame-effect" id="cc-confirm">Confirm</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('#cc-cancel').onclick = () => {
+            document.body.removeChild(overlay);
+            resolve(false);
+        };
+        overlay.querySelector('#cc-confirm').onclick = () => {
+            document.body.removeChild(overlay);
+            resolve(true);
+        };
+    });
+}

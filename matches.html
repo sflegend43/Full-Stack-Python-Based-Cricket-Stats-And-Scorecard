@@ -28,11 +28,12 @@
             </div>
             <ul class="nav-links">
                 <li><a href="index.html"       class="nav-link">📊 Dashboard</a></li>
-                <li><a href="tournaments.html" class="nav-link">🏆 Tournaments</a></li>
-                <li><a href="matches.html"     class="nav-link active">📋 Matches</a></li>
-                
-                <li><a href="players.html"     class="nav-link">🏏 Players</a></li>
+                <li><a href="tournaments.html"       class="nav-link">🏆 Tournaments</a></li>
+                <li><a href="matches.html"       class="nav-link active">📋 Matches</a></li>
+                <li><a href="players.html"       class="nav-link">🏏 Players</a></li>
                 <li><a href="teams.html"       class="nav-link">🛡️ Teams</a></li>
+                <li><a href="rankings.html"       class="nav-link">📈 Rankings</a></li>
+                <li><a href="stats.html"       class="nav-link">🤖 AI Stats</a></li>
             </ul>
             <div class="nav-right">
                 <div class="nav-user">
@@ -232,133 +233,136 @@
         </div>
     </div>
 
-    <!-- ═══ LIVE SCORING VIEW ═══ -->
-    <div id="live-scoring-view" style="display:none; max-width:480px; margin: 0 auto; width:100%; flex-direction:column; background: var(--bg-card); min-height: 80vh; position: relative;" class="glass-card">
-            
+    <!-- ═══ LIVE SCORING VIEW (full-screen, no-scroll vertical layout) ═══ -->
+    <div id="live-scoring-view" style="display:none; position:fixed; inset:0; z-index:1400; max-width:480px; margin:0 auto; width:100%; height:100vh; flex-direction:column; background: var(--bg-card); border-radius:0;">
+
         <!-- HEADER -->
-        <div style="display:flex; justify-content:space-between; align-items:center; padding: 1rem 1.2rem; background: rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.05); border-radius: 20px 20px 0 0;">
+        <div style="flex:0 0 auto; display:flex; justify-content:space-between; align-items:center; padding: 0.6rem 0.9rem; background: rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.05);">
             <div style="display:flex; align-items:center; gap: 0.5rem;">
-                <button onclick="closeLiveScoring()" style="background:transparent; border:none; color:var(--text-muted); font-size:1.4rem; cursor:pointer; padding: 0 0.5rem 0 0;">←</button>
-                    <span id="ls-teams-title" style="font-weight:700; font-size: 1.1rem;">Match</span>
-                </div>
-                <div style="display:flex; align-items:center; gap: 0.5rem;">
-                    <div style="background: rgba(22, 163, 74, 0.2); color: var(--neon-green); padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 0.3rem;">
-                        <span class="pulsing-dot" style="width:6px; height:6px; background:var(--neon-green); border-radius:50%; display:inline-block; animation: pulse 1.5s infinite;"></span> LIVE
-                    </div>
-                </div>
+                <button onclick="closeLiveScoring()" style="background:transparent; border:none; color:var(--text-muted); font-size:1.3rem; cursor:pointer; padding: 0 0.4rem 0 0;">←</button>
+                <span id="ls-teams-title" style="font-weight:700; font-size: 0.95rem;">Match</span>
             </div>
-
-            <!-- SCROLLABLE CONTENT AREA -->
-            <div style="flex:1; overflow-y:auto; padding: 1.2rem;">
-
-                <!-- SCORECARD BLOCK -->
-                <div class="glass-card" style="text-align:center; padding: 1.5rem 1rem; margin-bottom: 1.2rem; background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.2) 100%);">
-                    <div style="display:inline-block; background:rgba(255,255,255,0.05); padding:0.2rem 0.8rem; border-radius:12px; font-size:0.75rem; font-weight:600; color:var(--gold); margin-bottom: 0.5rem;" id="ls-batting-team">
-                        BAT TEAM
-                    </div>
-                    <div style="display:flex; justify-content:center; align-items:baseline; gap:0.5rem; margin-bottom:0.5rem;">
-                        <span id="ls-score" style="font-family:'Orbitron',sans-serif; font-size: 4rem; font-weight:900; line-height: 1;">0/0</span>
-                        <span id="ls-overs" style="font-family:'Orbitron',sans-serif; font-size: 1.2rem; color:var(--text-muted); font-weight:600;">(0.0)</span>
-                    </div>
-                    <div style="font-size: 0.85rem; color: var(--text-muted); font-weight:500;">
-                        CRR: <span id="ls-crr" style="color:var(--gold);">0.00</span>
-                    </div>
-                </div>
-
-                <!-- BATTERS BLOCK -->
-                <div style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 1rem; margin-bottom: 1rem; position: relative;">
-                    <!-- Swap Button -->
-                    <button onclick="manualSwapStriker()" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--gold); border-radius: 50%; width: 36px; height: 36px; display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 1rem; z-index: 10;">🔄</button>
-                    
-                    <div style="display:flex; justify-content:space-between; align-items:center; padding: 0.5rem 0; padding-right: 40px;">
-                        <div style="display:flex; align-items:center; gap: 0.5rem;">
-                            <div id="ls-striker-ind" style="width:8px; height:8px; border-radius:50%; background:var(--gold); opacity:1;"></div>
-                            <div>
-                                <div id="ls-striker-name" style="font-weight:700; font-size: 1rem;">—</div>
-                            </div>
-                        </div>
-                        <div style="text-align:right; min-width: 60px;">
-                            <span id="ls-striker-runs" style="font-weight:800; font-size: 1.1rem; color:var(--gold);">0</span>
-                            <span id="ls-striker-balls" style="font-size: 0.85rem; color:var(--text-muted);">(0)</span>
-                        </div>
-                    </div>
-                    
-                    <div style="display:flex; justify-content:space-between; align-items:center; padding: 0.5rem 0; padding-right: 40px;">
-                        <div style="display:flex; align-items:center; gap: 0.5rem;">
-                            <div id="ls-nonstriker-ind" style="width:8px; height:8px; border-radius:50%; background:var(--gold); opacity:0;"></div>
-                            <div>
-                                <div id="ls-nonstriker-name" style="font-weight:600; font-size: 0.95rem; color:var(--text-muted);">—</div>
-                            </div>
-                        </div>
-                        <div style="text-align:right; min-width: 60px;">
-                            <span id="ls-nonstriker-runs" style="font-weight:700; font-size: 1rem; color:var(--text-muted);">0</span>
-                            <span id="ls-nonstriker-balls" style="font-size: 0.85rem; color:var(--text-muted);">(0)</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- BOWLER BLOCK -->
-                <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 1rem;">
-                    <div style="flex:1;">
-                        <div id="ls-bowler-name" style="font-weight:700; font-size: 1rem;">—</div>
-                        <div style="font-size: 0.7rem; color:var(--primary); font-weight:600; letter-spacing:1px; cursor:pointer;" onclick="openContextModal('end_over')">BOWLING • TAP TO CHANGE</div>
-                    </div>
-                    <div style="display:flex; gap: 1rem; text-align:center;">
-                        <div>
-                            <div style="font-size:0.65rem; color:var(--text-muted); font-weight:700;">OV</div>
-                            <div id="ls-bowler-o" style="font-weight:700; font-family:'Orbitron',sans-serif;">0.0</div>
-                        </div>
-                        <div>
-                            <div style="font-size:0.65rem; color:var(--text-muted); font-weight:700;">M</div>
-                            <div id="ls-bowler-m" style="font-weight:700; font-family:'Orbitron',sans-serif;">0</div>
-                        </div>
-                        <div>
-                            <div style="font-size:0.65rem; color:var(--text-muted); font-weight:700;">R</div>
-                            <div id="ls-bowler-r" style="font-weight:700; font-family:'Orbitron',sans-serif;">0</div>
-                        </div>
-                        <div>
-                            <div style="font-size:0.65rem; color:var(--text-muted); font-weight:700;">W</div>
-                            <div id="ls-bowler-w" style="font-weight:700; font-family:'Orbitron',sans-serif; color:var(--gold);">0</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- THIS OVER TIMELINE -->
-                <div style="margin-bottom: 1rem;">
-                    <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem;" id="ls-this-over-label">This Over</div>
-                    <div id="ls-this-over-bubbles" style="display:flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 0.5rem; min-height: 40px;">
-                        <!-- Bubbles injected by JS -->
-                    </div>
-                </div>
-
-            </div> <!-- End Scrollable Area -->
-
-            <!-- NUMPAD AREA (Fixed at bottom) -->
-            <div style="background: rgba(255,255,255,0.03); border-top: 1px solid rgba(255,255,255,0.08); padding: 1rem; border-radius: 20px 20px 0 0;">
-                <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
-                    <button class="numpad-btn" onclick="lsRecordRun(0)">0</button>
-                    <button class="numpad-btn" onclick="lsRecordRun(1)">1</button>
-                    <button class="numpad-btn" onclick="lsRecordRun(2)">2</button>
-                    <button class="numpad-btn numpad-btn-action" style="color:var(--primary-light);" onclick="undoLastBall()">UNDO</button>
-                    
-                    <button class="numpad-btn" onclick="lsRecordRun(3)">3</button>
-                    <button class="numpad-btn" style="color:var(--gold); font-weight:800;" onclick="lsRecordRun(4)">
-                        4<br><span style="font-size:0.6rem; font-weight:600;">FOUR</span>
-                    </button>
-                    <button class="numpad-btn" style="color:var(--neon-green); font-weight:800;" onclick="lsRecordRun(6)">
-                        6<br><span style="font-size:0.6rem; font-weight:600;">SIX</span>
-                    </button>
-                    <button class="numpad-btn numpad-btn-action" style="color:var(--red-ball-light); font-weight:800;" onclick="lsOpenWicketModal()">OUT</button>
-                    
-                    <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('Wide')">WD</button>
-                    <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('NoBall')">NB</button>
-                    <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('Bye')">BYE</button>
-                    <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('LegBye')">LB</button>
-                    <button class="numpad-btn numpad-btn-secondary" style="color:var(--gold);" onclick="lsOpenExtraModal('Penalty')">5 PEN</button>
-                </div>
+            <div style="background: rgba(22, 163, 74, 0.2); color: var(--neon-green); padding: 0.15rem 0.55rem; border-radius: 12px; font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; gap: 0.3rem;">
+                <span class="pulsing-dot" style="width:6px; height:6px; background:var(--neon-green); border-radius:50%; display:inline-block; animation: pulse 1.5s infinite;"></span> LIVE
             </div>
-            
         </div>
+
+        <!-- MAIN CONTENT (fits viewport, no vertical scroll needed) -->
+        <div style="flex:1 1 auto; display:flex; flex-direction:column; justify-content:space-evenly; padding: 0.5rem 0.9rem; min-height:0; overflow:hidden; gap:0.35rem;">
+
+            <!-- SCORECARD BLOCK -->
+            <div class="glass-card" style="text-align:center; padding: 0.6rem 0.8rem; background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.2) 100%);">
+                <div style="display:flex; justify-content:center; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.2rem;">
+                    <span id="ls-batting-team" style="display:inline-block; background:rgba(255,255,255,0.05); padding:0.15rem 0.6rem; border-radius:10px; font-size:0.68rem; font-weight:700; color:var(--gold);">BAT TEAM</span>
+                    <span id="ls-bowling-team" style="display:inline-block; background:rgba(255,255,255,0.05); padding:0.15rem 0.6rem; border-radius:10px; font-size:0.68rem; font-weight:700; color:var(--text-muted);">BOWL TEAM</span>
+                </div>
+                <div style="display:flex; justify-content:center; align-items:baseline; gap:0.5rem; margin-bottom:0.15rem;">
+                    <span id="ls-score" style="font-family:'Orbitron',sans-serif; font-size: 2.6rem; font-weight:900; line-height: 1;">0/0</span>
+                    <span id="ls-overs" style="font-family:'Orbitron',sans-serif; font-size: 1.05rem; color:var(--text-muted); font-weight:600;">(0.0)</span>
+                </div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); font-weight:500;">
+                    CRR: <span id="ls-crr" style="color:var(--gold);">0.00</span>
+                </div>
+            </div>
+
+            <!-- BATTERS BLOCK -->
+            <div style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.5rem; position: relative;">
+                <!-- Swap Button -->
+                <button onclick="manualSwapStriker()" title="Swap striker/non-striker" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--gold); border-radius: 50%; width: 30px; height: 30px; display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 0.85rem; z-index: 10;">🔄</button>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; padding: 0.25rem 0; padding-right: 36px;">
+                    <div style="display:flex; align-items:center; gap: 0.5rem;">
+                        <div id="ls-striker-ind" style="width:7px; height:7px; border-radius:50%; background:var(--gold); opacity:1;"></div>
+                        <div id="ls-striker-name" style="font-weight:700; font-size: 0.9rem;">—</div>
+                    </div>
+                    <div style="text-align:right; min-width: 55px;">
+                        <span id="ls-striker-runs" style="font-weight:800; font-size: 1rem; color:var(--gold);">0</span>
+                        <span id="ls-striker-balls" style="font-size: 0.78rem; color:var(--text-muted);">(0)</span>
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; padding: 0.25rem 0; padding-right: 36px;">
+                    <div style="display:flex; align-items:center; gap: 0.5rem;">
+                        <div id="ls-nonstriker-ind" style="width:7px; height:7px; border-radius:50%; background:var(--gold); opacity:0;"></div>
+                        <div id="ls-nonstriker-name" style="font-weight:600; font-size: 0.85rem; color:var(--text-muted);">—</div>
+                    </div>
+                    <div style="text-align:right; min-width: 55px;">
+                        <span id="ls-nonstriker-runs" style="font-weight:700; font-size: 0.9rem; color:var(--text-muted);">0</span>
+                        <span id="ls-nonstriker-balls" style="font-size: 0.78rem; color:var(--text-muted);">(0)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BOWLER BLOCK -->
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                <div style="flex:1;">
+                    <div id="ls-bowler-name" style="font-weight:700; font-size: 0.9rem;">—</div>
+                    <div style="font-size: 0.65rem; color:var(--primary); font-weight:600; letter-spacing:0.5px; cursor:pointer;" onclick="openContextModal('end_over')">BOWLING • TAP TO CHANGE</div>
+                </div>
+                <div style="display:flex; gap: 0.7rem; text-align:center;">
+                    <div>
+                        <div style="font-size:0.6rem; color:var(--text-muted); font-weight:700;">OV</div>
+                        <div id="ls-bowler-o" style="font-weight:700; font-family:'Orbitron',sans-serif; font-size:0.9rem;">0.0</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.6rem; color:var(--text-muted); font-weight:700;">M</div>
+                        <div id="ls-bowler-m" style="font-weight:700; font-family:'Orbitron',sans-serif; font-size:0.9rem;">0</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.6rem; color:var(--text-muted); font-weight:700;">R</div>
+                        <div id="ls-bowler-r" style="font-weight:700; font-family:'Orbitron',sans-serif; font-size:0.9rem;">0</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.6rem; color:var(--text-muted); font-weight:700;">W</div>
+                        <div id="ls-bowler-w" style="font-weight:700; font-family:'Orbitron',sans-serif; color:var(--gold); font-size:0.9rem;">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- THIS OVER TIMELINE -->
+            <div>
+                <div style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.3rem;" id="ls-this-over-label">This Over</div>
+                <div id="ls-this-over-bubbles" style="display:flex; gap: 0.35rem; overflow-x: auto; min-height: 30px;">
+                    <!-- Bubbles injected by JS -->
+                </div>
+            </div>
+
+        </div> <!-- End Main Content -->
+
+        <!-- NUMPAD AREA (pinned at bottom, always visible) -->
+        <div style="flex:0 0 auto; background: var(--bg-surface); border-top: 1px solid rgba(255,255,255,0.08); padding: 0.8rem 0.7rem; padding-bottom: max(0.8rem, env(safe-area-inset-bottom)); box-shadow: 0 -4px 20px rgba(0,0,0,0.5);">
+            <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem;">
+                
+                <!-- ROW 1 -->
+                <button class="numpad-btn" onclick="lsRecordRun(0)">0</button>
+                <button class="numpad-btn" onclick="lsRecordRun(1)">1</button>
+                <button class="numpad-btn" onclick="lsRecordRun(2)">2</button>
+                <button class="numpad-btn" onclick="lsRecordRun(3)">3</button>
+                
+                <!-- ROW 2 -->
+                <button class="numpad-btn flame-effect" style="color:var(--gold); font-weight:900;" onclick="lsRecordRun(4)">
+                    4<br><span style="font-size:0.6rem; font-weight:700;">FOUR</span>
+                </button>
+                <button class="numpad-btn flame-effect" style="color:var(--neon-green); font-weight:900;" onclick="lsRecordRun(6)">
+                    6<br><span style="font-size:0.6rem; font-weight:700;">SIX</span>
+                </button>
+                <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('Wide')">WD</button>
+                <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('NoBall')">NB</button>
+
+                <!-- ROW 3 -->
+                <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('Bye')">BYE</button>
+                <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('LegBye')">LB</button>
+                <button class="numpad-btn numpad-btn-action flame-effect" style="grid-column: span 2; color:#fff; font-size:1.1rem; border: none; font-weight:900;" onclick="lsOpenWicketModal()">🚨 OUT</button>
+
+                <!-- ROW 4 -->
+                <button class="numpad-btn numpad-btn-secondary" style="grid-column: span 2; color:var(--gold);" onclick="lsOpenExtraModal('Penalty')">5 PENALTY</button>
+                <button class="numpad-btn numpad-btn-secondary" style="grid-column: span 1; font-size:1.3rem;" onclick="lsOpenRetireModal()" title="Retire Batter">🚑</button>
+                <button class="numpad-btn numpad-btn-action" style="grid-column: span 1; color:var(--primary-light);" onclick="undoLastBall()">↩ UNDO</button>
+
+            </div>
+        </div>
+
+    </div>
 
     <!-- ═══ LIVE SCORING SUB-MODALS ═══ -->
     <!-- Extras Modal -->
@@ -384,17 +388,18 @@
     <div id="lsWicketModal" class="modal-overlay" style="display:none; z-index: 2500; background: rgba(0,0,0,0.8);">
         <div class="modal-card glass-card" style="max-width:360px; width:90%; text-align:left;">
             <h3 style="margin-bottom: 1rem; color:var(--red-ball-light);">Fall of Wicket</h3>
-            
+
             <div style="margin-bottom: 1rem;">
                 <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Dismissed Batsman</label>
                 <select id="ls-wicket-who" class="form-input" style="width:100%;"></select>
             </div>
-            
+
             <div style="margin-bottom: 1rem;">
                 <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Dismissal Type</label>
                 <select id="ls-wicket-type" class="form-input" style="width:100%;" onchange="lsOnWicketTypeChange()">
                     <option value="Bowled">🎯 Bowled</option>
                     <option value="Caught">🤲 Caught</option>
+                    <option value="CaughtAndBowled">🤾 Caught & Bowled</option>
                     <option value="LBW">🦵 LBW</option>
                     <option value="RunOut">🏃 Run Out</option>
                     <option value="Stumped">🧤 Stumped</option>
@@ -405,15 +410,60 @@
                     <option value="HitTwice">🔁 Hit the Ball Twice</option>
                 </select>
             </div>
-            
+
             <div id="ls-wicket-fielder-box" style="margin-bottom: 1rem; display:none;">
                 <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Fielder</label>
                 <select id="ls-wicket-fielder" class="form-input" style="width:100%;"></select>
             </div>
-            
+
+            <div style="margin-bottom: 1rem; padding-top:0.5rem; border-top: 1px dashed rgba(255,255,255,0.1);">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Also off an extra? (optional)</label>
+                <div style="display:flex; gap:0.5rem;">
+                    <select id="ls-wicket-extra-type" class="form-input" style="flex:1;" onchange="lsOnWicketExtraTypeChange()">
+                        <option value="">None</option>
+                        <option value="Wide">Wide</option>
+                        <option value="NoBall">No Ball</option>
+                        <option value="Bye">Bye</option>
+                        <option value="LegBye">Leg Bye</option>
+                    </select>
+                    <select id="ls-wicket-extra-runs" class="form-input" style="width:90px; display:none;">
+                        <option value="0">+0</option>
+                        <option value="1">+1</option>
+                        <option value="2">+2</option>
+                        <option value="3">+3</option>
+                        <option value="4">+4</option>
+                    </select>
+                </div>
+            </div>
+
             <div style="display:flex; gap:0.5rem;">
                 <button class="btn-cancel" style="flex:1;" onclick="document.getElementById('lsWicketModal').style.display='none'">Cancel</button>
                 <button class="btn-submit" style="flex:1; margin-top:0; background:var(--red-ball); border-color:var(--red-ball-light);" onclick="lsConfirmWicket()">🚨 OUT!</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Retire Batter Modal -->
+    <div id="lsRetireModal" class="modal-overlay" style="display:none; z-index: 2500; background: rgba(0,0,0,0.8);">
+        <div class="modal-card glass-card" style="max-width:340px; width:90%; text-align:left;">
+            <h3 style="margin-bottom: 1rem; color:var(--primary-light);">🚑 Retire Batter</h3>
+
+            <div style="margin-bottom: 1rem;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Which batter is retiring?</label>
+                <select id="ls-retire-who" class="form-input" style="width:100%;"></select>
+            </div>
+
+            <div style="margin-bottom: 1.5rem;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Reason</label>
+                <select id="ls-retire-reason" class="form-input" style="width:100%;">
+                    <option value="RetiredHurt">🩹 Retired Hurt (may return later)</option>
+                    <option value="RetiredOut">🚪 Retired Out (counts as a wicket)</option>
+                </select>
+            </div>
+
+            <div style="display:flex; gap:0.5rem;">
+                <button class="btn-cancel" style="flex:1;" onclick="document.getElementById('lsRetireModal').style.display='none'">Cancel</button>
+                <button class="btn-submit" style="flex:1; margin-top:0;" onclick="lsConfirmRetire()">✅ Confirm</button>
             </div>
         </div>
     </div>

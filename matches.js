@@ -336,7 +336,7 @@ function switchInnings(tab) {
 
 async function undoLastBall() {
     if (!beMatchId) return;
-    if (!confirm('Are you sure you want to undo the last ball?')) return;
+    if (!await customConfirm('Are you sure you want to undo the last ball?')) return;
     try {
         const res = await authFetch(`${API}/api/balls/${beMatchId}?innings=${beInnings}`);
         const balls = await res.json();
@@ -352,7 +352,7 @@ async function undoLastBall() {
 }
 
 async function confirmDeleteBall(ballId) {
-    if (confirm('Delete this specific ball?')) {
+    if (await customConfirm('Delete this specific ball?')) {
         await deleteBall(ballId);
     }
 }
@@ -381,7 +381,7 @@ async function deleteBall(ballId) {
 }
 
 async function deleteMatch(mid) {
-    if (!confirm(`Delete Match #${mid}? All ball-by-ball data will also be removed.`)) return;
+    if (!await customConfirm(`Delete Match #${mid}? All ball-by-ball data will also be removed.`)) return;
     try {
         const res = await authFetch(`${API}/api/matches/${mid}`, { method: 'DELETE' });
         if (res.ok) { showToast(`Match #${mid} deleted.`); await loadMatches(); }
@@ -711,6 +711,13 @@ let lsExtraRuns = 0;
 let lsCurrentOver = 1;
 let lsCurrentBall = 1;
 
+// ICC rules state, refreshed from /api/balls/state on every load
+let beDismissedIDs = [];
+let beBowlerOvers = {};
+let beMaxOversPerBowler = null;
+let beLastOverBowlerID = null;
+let currentBowlingTeam = null;
+
 async function openBallEntry() {
     if (!beMatchId) { showToast('Open a scorecard first.', 'error'); return; }
 
@@ -719,16 +726,24 @@ async function openBallEntry() {
         const data = await res.json();
 
         bePlayers = data.players || [];
+        beDismissedIDs = data.dismissedPlayerIDs || [];
+        beBowlerOvers = data.bowlerOvers || {};
+        beMaxOversPerBowler = data.maxOversPerBowler;
+        beLastOverBowlerID = data.lastOverBowlerID || null;
         populateBallDropdowns();
         
         lsCurrentOver = data.nextOver || 1;
         lsCurrentBall = data.nextBall || 1;
         
-        if (data.battingTeam) {
-            currentBattingTeam = data.battingTeam;
-        }
+        if (data.battingTeam) currentBattingTeam = data.battingTeam;
+        if (data.bowlingTeam) currentBowlingTeam = data.bowlingTeam;
         
         updateScoreboardStrip(data.totalRuns, data.wickets, lsCurrentOver, lsCurrentBall);
+
+        const battingLabel = document.getElementById('ls-batting-team');
+        const bowlingLabel = document.getElementById('ls-bowling-team');
+        if (battingLabel) battingLabel.textContent = `🏏 ${shortTeam(currentBattingTeam).toUpperCase()} BATTING`;
+        if (bowlingLabel) bowlingLabel.textContent = `🎯 ${shortTeam(currentBowlingTeam).toUpperCase()} BOWLING`;
 
         if (lsCurrentOver === 1 && lsCurrentBall === 1) {
             openContextModal('innings_start');
@@ -745,8 +760,7 @@ async function openBallEntry() {
     document.getElementById('list-view').style.display = 'none';
     document.getElementById('scorecard-view').style.display = 'none';
     
-    document.getElementById('ls-batting-team').textContent = beInnings === 1 ? '1ST INNINGS' : '2ND INNINGS';
-    document.getElementById('ls-teams-title').textContent = `Match #${beMatchId}`;
+    document.getElementById('ls-teams-title').textContent = `Match #${beMatchId} • Innings ${beInnings}`;
 }
 
 function closeLiveScoring() {
@@ -756,17 +770,25 @@ function closeLiveScoring() {
 }
 
 function populateBallDropdowns() {
-    const allOpts     = bePlayers.map(p => `<option value="${p.playerID}">${p.playerName} (${p.playerRole})</option>`).join('');
-    const batOpts     = bePlayers.filter(p => p.canBat || true).map(p => `<option value="${p.playerID}">${p.playerName}</option>`).join('');
-    const bowlOpts    = bePlayers.filter(p => p.canBowl || p.playerRole === 'AllRounder').map(p => `<option value="${p.playerID}">${p.playerName} (${p.playerRole})</option>`).join('');
-    const fieldOpts   = '<option value="">— Select Fielder —</option>' + allOpts;
+    const allOpts  = bePlayers.map(p => `<option value="${p.playerID}">${p.playerName} (${p.playerRole})</option>`).join('');
+    const fieldOpts = '<option value="">— Select Fielder —</option>' + allOpts;
 
-    if (document.getElementById('ls-wicket-who')) {
-        document.getElementById('ls-wicket-who').innerHTML = batOpts;
-    }
     if (document.getElementById('ls-wicket-fielder')) {
         document.getElementById('ls-wicket-fielder').innerHTML = fieldOpts;
     }
+}
+
+function currentBattersOptions() {
+    const opts = [];
+    if (currentStriker) {
+        const p = bePlayers.find(x => x.playerID === currentStriker);
+        if (p) opts.push(`<option value="${p.playerID}">${p.playerName} (striker)</option>`);
+    }
+    if (currentNonStriker) {
+        const p = bePlayers.find(x => x.playerID === currentNonStriker);
+        if (p) opts.push(`<option value="${p.playerID}">${p.playerName} (non-striker)</option>`);
+    }
+    return opts.join('');
 }
 
 // ── Context Modal (Striker, Non-Striker, Bowler) ──
@@ -779,24 +801,50 @@ function getMatchTeams() {
     return Array.from(teams);
 }
 
-function filterContextPlayers() {
+function bowlerLegalBalls(playerID) {
+    const info = beBowlerOvers[playerID];
+    return info ? info.legalBalls : 0;
+}
+
+function filterContextPlayers(mode) {
     const teams = getMatchTeams();
     if (!currentBattingTeam && teams.length > 0) {
         currentBattingTeam = teams[0];
     }
-    const bowlingTeam = teams.find(t => t !== currentBattingTeam) || teams[0];
+    const bowlingTeam = currentBowlingTeam || teams.find(t => t !== currentBattingTeam) || teams[0];
 
+    // Batters: exclude anyone already dismissed/retired this innings
     const batOpts = bePlayers
-        .filter(p => p.teamName === currentBattingTeam)
+        .filter(p => p.teamName === currentBattingTeam && !beDismissedIDs.includes(p.playerID))
         .map(p => `<option value="${p.playerID}">${p.playerName}</option>`).join('');
-        
+
+    // New-batter-after-wicket list additionally excludes whoever is still at the crease
+    const newBatterOpts = bePlayers
+        .filter(p => p.teamName === currentBattingTeam
+            && !beDismissedIDs.includes(p.playerID)
+            && p.playerID !== currentStriker && p.playerID !== currentNonStriker)
+        .map(p => `<option value="${p.playerID}">${p.playerName}</option>`).join('');
+
+    // Bowlers: must be able to bowl, belong to the bowling side, not have bowled the
+    // immediately preceding over, and not have already reached the format's over cap.
     const bowlOpts = bePlayers
-        .filter(p => p.teamName === bowlingTeam && (p.canBowl || p.playerRole === 'AllRounder' || p.playerRole === 'Bowler'))
-        .map(p => `<option value="${p.playerID}">${p.playerName} (${p.playerRole})</option>`).join('');
-    
-    document.getElementById('ctx-striker').innerHTML = batOpts || `<option value="">No batters found</option>`;
+        .filter(p => {
+            if (p.teamName !== bowlingTeam || !p.canBowl) return false;
+            if ((mode === 'new_over' || mode === 'end_over')) {
+                if (beLastOverBowlerID && p.playerID === beLastOverBowlerID) return false;
+                if (beMaxOversPerBowler != null && Math.floor(bowlerLegalBalls(p.playerID) / 6) >= beMaxOversPerBowler) return false;
+            }
+            return true;
+        })
+        .map(p => {
+            const legal = bowlerLegalBalls(p.playerID);
+            const oversTxt = `${Math.floor(legal / 6)}.${legal % 6}`;
+            return `<option value="${p.playerID}">${p.playerName} (${oversTxt} ov)</option>`;
+        }).join('');
+
+    document.getElementById('ctx-striker').innerHTML = (mode === 'wicket' ? newBatterOpts : batOpts) || `<option value="">No batters available</option>`;
     document.getElementById('ctx-nonstriker').innerHTML = batOpts || `<option value="">No batters found</option>`;
-    document.getElementById('ctx-bowler').innerHTML = bowlOpts || batOpts || `<option value="">No bowlers found</option>`;
+    document.getElementById('ctx-bowler').innerHTML = bowlOpts || `<option value="">No eligible bowlers — ICC over limit reached</option>`;
 }
 
 function openContextModal(mode, isEndOver = false) {
@@ -809,13 +857,13 @@ function openContextModal(mode, isEndOver = false) {
     const bowlerDiv = document.getElementById('contextBowlerContainer');
 
     if (mode === 'innings_start') {
-        title.innerHTML = '🏏 Innings Start';
+        title.innerHTML = '🏏 Innings Start — Select Openers & Bowler';
         strikerDiv.style.display = 'block';
         nonStrikerDiv.style.display = 'block';
         bowlerDiv.style.display = 'block';
     } else {
         if (mode === 'new_over' || mode === 'end_over') {
-            title.innerHTML = '🔄 Select New Bowler';
+            title.innerHTML = '🔄 Over Complete — Select New Bowler';
             strikerDiv.style.display = 'none';
             nonStrikerDiv.style.display = 'none';
             bowlerDiv.style.display = 'block';
@@ -832,12 +880,11 @@ function openContextModal(mode, isEndOver = false) {
         }
     }
 
+    filterContextPlayers(mode);
 
-    filterContextPlayers();
-
-    if (currentStriker) document.getElementById('ctx-striker').value = currentStriker;
+    if (mode !== 'wicket' && currentStriker) document.getElementById('ctx-striker').value = currentStriker;
     if (currentNonStriker) document.getElementById('ctx-nonstriker').value = currentNonStriker;
-    if (currentBowler) document.getElementById('ctx-bowler').value = currentBowler;
+    if (currentBowler && mode !== 'new_over' && mode !== 'end_over') document.getElementById('ctx-bowler').value = currentBowler;
 
     modal.style.display = 'flex';
 }
@@ -1270,7 +1317,7 @@ function editBall(ballId) {
 }
 
 async function confirmDeleteBall(ballId) {
-    if (!confirm('Delete this ball? Match scores will be recalculated.')) return;
+    if (!await customConfirm('Delete this ball? Match scores will be recalculated.')) return;
     try {
         const res  = await authFetch(`${API}/api/balls/${ballId}`, { method: 'DELETE' });
         const data = await res.json();
@@ -1334,3 +1381,30 @@ function playCrowdSound(type) {
     }
 }
 
+
+// ─── Custom Confirm Modal ───
+function customConfirm(msg) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'custom-confirm-overlay';
+        overlay.innerHTML = `
+            <div class="custom-confirm-card">
+                <p>${msg}</p>
+                <div class="custom-confirm-actions">
+                    <button class="btn-cancel" id="cc-cancel">Cancel</button>
+                    <button class="btn-submit flame-effect" id="cc-confirm">Confirm</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('#cc-cancel').onclick = () => {
+            document.body.removeChild(overlay);
+            resolve(false);
+        };
+        overlay.querySelector('#cc-confirm').onclick = () => {
+            document.body.removeChild(overlay);
+            resolve(true);
+        };
+    });
+}

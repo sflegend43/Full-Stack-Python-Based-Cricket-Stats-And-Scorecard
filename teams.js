@@ -128,7 +128,7 @@ function renderTeams(teams) {
                     <span style="font-weight: 500;">${t.country}</span>
                 </div>
             </td>
-            <td><strong style="color:var(--gold);">🏏 ${t.teamCaptain || '—'}</strong></td>
+            
             <td style="color:var(--text-muted); font-size:0.85rem;">${t.headCoach || '—'}</td>
             <td>
                 <button class="btn-view" onclick="viewTeam('${encodeURIComponent(t.teamName)}')">👥 View Roster</button>
@@ -148,7 +148,7 @@ async function saveTeam(e) {
         teamName: document.getElementById('new-team-name').value,
         countryName: document.getElementById('new-team-country').value,
         headCoach: document.getElementById('new-team-coach').value,
-        captainID: document.getElementById('new-team-captain').value
+        
     };
 
     try {
@@ -163,7 +163,7 @@ async function saveTeam(e) {
             document.getElementById('new-team-name').value = '';
             document.getElementById('new-team-country').value = '';
             document.getElementById('new-team-coach').value = '';
-            document.getElementById('new-team-captain').value = '';
+            
             toggleAddTeamForm();
             loadTeams();
         } else {
@@ -267,4 +267,31 @@ function renderTeamDetail(data) {
     } else {
         matchTb.innerHTML = `<tr><td colspan="6" class="empty-state">No matches played yet.</td></tr>`;
     }
+}
+
+// ─── Custom Confirm Modal ───
+function customConfirm(msg) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'custom-confirm-overlay';
+        overlay.innerHTML = `
+            <div class="custom-confirm-card">
+                <p>${msg}</p>
+                <div class="custom-confirm-actions">
+                    <button class="btn-cancel" id="cc-cancel">Cancel</button>
+                    <button class="btn-submit flame-effect" id="cc-confirm">Confirm</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('#cc-cancel').onclick = () => {
+            document.body.removeChild(overlay);
+            resolve(false);
+        };
+        overlay.querySelector('#cc-confirm').onclick = () => {
+            document.body.removeChild(overlay);
+            resolve(true);
+        };
+    });
 }

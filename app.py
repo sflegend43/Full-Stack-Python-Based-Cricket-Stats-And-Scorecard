@@ -233,6 +233,11 @@ def init_db():
         except sqlite3.OperationalError:
             pass # column already exists
 
+        try:
+            conn.execute('ALTER TABLE BallByBall ADD COLUMN fielderID TEXT')
+        except sqlite3.OperationalError:
+            pass # column already exists
+
 # ─────────────────────────────────────────────────────
 # Static Page Routes
 # ─────────────────────────────────────────────────────
@@ -823,7 +828,7 @@ def leaderboard():
         batsmen = conn.execute(f'''
             SELECT b.batsmanID AS playerID, p.playerName, p.playerNationality,
                    SUM(b.runsScored) AS totalRuns,
-                   COUNT(b.ballID)   AS ballsFaced,
+                   SUM(CASE WHEN b.extraType='Retired' THEN 0 ELSE 1 END) AS ballsFaced,
                    SUM(CASE WHEN b.runsScored=4 THEN 1 ELSE 0 END) AS fours,
                    SUM(CASE WHEN b.runsScored=6 THEN 1 ELSE 0 END) AS sixes
             FROM BallByBall b
@@ -837,8 +842,9 @@ def leaderboard():
         # Top bowlers by wickets
         bowlers = conn.execute(f'''
             SELECT b.bowlerID AS playerID, p.playerName, p.playerNationality,
-                   SUM(b.wicketFallen)       AS wickets,
-                   COUNT(b.ballID)           AS ballsBowled,
+                   SUM(CASE WHEN b.wicketFallen=1 AND (b.wicketType IS NULL OR b.wicketType != 'RetiredOut')
+                            THEN 1 ELSE 0 END) AS wickets,
+                   SUM(CASE WHEN b.extraType='Retired' THEN 0 ELSE 1 END) AS ballsBowled,
                    SUM(b.runsScored+b.extras) AS runsConceded
             FROM BallByBall b
             JOIN Players p ON b.bowlerID = p.playerID
@@ -875,10 +881,10 @@ def scorecard(match_id):
             return conn.execute('''
                 SELECT b.batsmanID, p.playerName,
                        SUM(b.runsScored) AS runs,
-                       COUNT(b.ballID)   AS balls,
+                       SUM(CASE WHEN b.extraType='Retired' THEN 0 ELSE 1 END) AS balls,
                        SUM(CASE WHEN b.runsScored=4 THEN 1 ELSE 0 END) AS fours,
                        SUM(CASE WHEN b.runsScored=6 THEN 1 ELSE 0 END) AS sixes,
-                       MAX(CASE WHEN b.wicketFallen=1 AND b.dismissedPlayerID=b.batsmanID
+                       MAX(CASE WHEN b.dismissedPlayerID=b.batsmanID
                            THEN b.wicketType ELSE NULL END) AS dismissal
                 FROM BallByBall b
                 JOIN Players p ON b.batsmanID = p.playerID
@@ -889,9 +895,10 @@ def scorecard(match_id):
         def get_bowling(innings_num):
             return conn.execute('''
                 SELECT b.bowlerID, p.playerName,
-                       COUNT(b.ballID)            AS balls,
+                       SUM(CASE WHEN b.extraType='Retired' THEN 0 ELSE 1 END) AS balls,
                        SUM(b.runsScored+b.extras) AS runs,
-                       SUM(b.wicketFallen)         AS wickets,
+                       SUM(CASE WHEN b.wicketFallen=1 AND (b.wicketType IS NULL OR b.wicketType != 'RetiredOut')
+                                THEN 1 ELSE 0 END) AS wickets,
                        SUM(b.extras)               AS extras
                 FROM BallByBall b
                 JOIN Players p ON b.bowlerID = p.playerID
@@ -1024,32 +1031,32 @@ def get_balls(match_id):
     return jsonify([dict(r) for r in rows])
 
 
+MAX_OVERS_PER_BOWLER = {'T10': 2, 'T20': 4, 'ODI': 10, 'TEST': None}
+
+
 @app.route('/api/balls/state/<int:match_id>', methods=['GET'])
 def get_ball_state(match_id):
     """Return current match state (over, ball, runs, wickets) to pre-fill the entry form."""
     innings = request.args.get('innings', 1, type=int)
     with get_db() as conn:
-        last = conn.execute('''
-            SELECT overNumber, ballNumber, inningsNumber
-            FROM BallByBall WHERE matchID=? AND inningsNumber=?
-            ORDER BY overNumber DESC, ballNumber DESC LIMIT 1
-        ''', (match_id, innings)).fetchone()
-
-        # aggregate per innings
+        # aggregate per innings — 'Retired' marker rows are not legal deliveries
         agg = conn.execute('''
             SELECT
-                SUM(CASE WHEN extraType NOT IN ('Wide','NoBall') OR extraType IS NULL
+                SUM(CASE WHEN (extraType IS NULL OR extraType NOT IN ('Wide','NoBall','Retired'))
                          THEN 1 ELSE 0 END)            AS legalBalls,
                 SUM(runsScored + extras)                AS totalRuns,
                 SUM(wicketFallen)                       AS wickets
             FROM BallByBall WHERE matchID=? AND inningsNumber=?
         ''', (match_id, innings)).fetchone()
 
-        # playing XI for this match (both teams)
+        # playing XI for this match (both teams). canBowl includes anyone with a
+        # bowling style on record, not just designated Bowlers/AllRounders.
         xi = conn.execute('''
             SELECT px.playerID, p.playerName, p.playerRole, px.teamName,
                    CASE WHEN p.playerRole IN ('Batsman','AllRounder','WicketKeeper') THEN 1 ELSE 0 END AS canBat,
-                   CASE WHEN p.playerRole IN ('Bowler','AllRounder') THEN 1 ELSE 0 END AS canBowl
+                   CASE WHEN p.playerRole IN ('Bowler','AllRounder')
+                        OR (p.bowlingStyle IS NOT NULL AND TRIM(LOWER(p.bowlingStyle)) NOT IN ('', 'none'))
+                        THEN 1 ELSE 0 END AS canBowl
             FROM PlayingXI px JOIN Players p ON px.playerID = p.playerID
             WHERE px.matchID=?
             ORDER BY p.playerName
@@ -1057,13 +1064,45 @@ def get_ball_state(match_id):
 
         match = conn.execute('SELECT * FROM Matches WHERE matchID=?', (match_id,)).fetchone()
 
-    if agg and agg['legalBalls'] is not None:
-        legal = int(agg['legalBalls'])
-        over = (legal // 6) + 1
-        next_ball = (legal % 6) + 1
-    else:
-        over      = 1
-        next_ball = 1
+        # Batsmen already dismissed or retired this innings (excluded from new-batter picks)
+        dismissed_rows = conn.execute('''
+            SELECT DISTINCT dismissedPlayerID FROM BallByBall
+            WHERE matchID=? AND inningsNumber=? AND dismissedPlayerID IS NOT NULL
+        ''', (match_id, innings)).fetchall()
+        dismissed_ids = [r['dismissedPlayerID'] for r in dismissed_rows]
+
+        # Legal balls bowled per bowler this innings, to enforce the ICC max-overs-per-bowler rule
+        bowler_rows = conn.execute('''
+            SELECT bowlerID,
+                   SUM(CASE WHEN (extraType IS NULL OR extraType NOT IN ('Wide','NoBall','Retired'))
+                            THEN 1 ELSE 0 END) AS legalBalls
+            FROM BallByBall WHERE matchID=? AND inningsNumber=?
+            GROUP BY bowlerID
+        ''', (match_id, innings)).fetchall()
+        bowler_overs = {
+            r['bowlerID']: {'overs': r['legalBalls'] // 6, 'balls': r['legalBalls'] % 6, 'legalBalls': r['legalBalls']}
+            for r in bowler_rows
+        }
+
+        if agg and agg['legalBalls'] is not None:
+            legal = int(agg['legalBalls'])
+            over = (legal // 6) + 1
+            next_ball = (legal % 6) + 1
+        else:
+            legal     = 0
+            over      = 1
+            next_ball = 1
+
+        # Bowler of the most recently *completed* over (can't bowl the next one immediately after)
+        last_over_bowler_id = None
+        if next_ball == 1 and over > 1:
+            prev_over_row = conn.execute('''
+                SELECT bowlerID FROM BallByBall
+                WHERE matchID=? AND inningsNumber=? AND overNumber=?
+                ORDER BY ballID DESC LIMIT 1
+            ''', (match_id, innings, over - 1)).fetchone()
+            if prev_over_row:
+                last_over_bowler_id = prev_over_row['bowlerID']
 
     batting_team = None
     bowling_team = None
@@ -1091,17 +1130,49 @@ def get_ball_state(match_id):
             batting_team = inn1_bowl
             bowling_team = inn1_bat
 
+    max_overs = MAX_OVERS_PER_BOWLER.get(match['matchFormat']) if match else None
+
     return jsonify({
-        'nextOver':    over,
-        'nextBall':    next_ball,
-        'totalRuns':   agg['totalRuns']  or 0,
-        'wickets':     agg['wickets']    or 0,
-        'legalBalls':  agg['legalBalls'] or 0,
-        'battingTeam': batting_team,
-        'bowlingTeam': bowling_team,
-        'players':     [dict(r) for r in xi],
-        'match':       dict(match) if match else {},
+        'nextOver':          over,
+        'nextBall':          next_ball,
+        'totalRuns':         agg['totalRuns']  or 0,
+        'wickets':           agg['wickets']    or 0,
+        'legalBalls':        agg['legalBalls'] or 0,
+        'battingTeam':       batting_team,
+        'bowlingTeam':       bowling_team,
+        'players':           [dict(r) for r in xi],
+        'match':             dict(match) if match else {},
+        'dismissedPlayerIDs': dismissed_ids,
+        'bowlerOvers':       bowler_overs,
+        'maxOversPerBowler': max_overs,
+        'lastOverBowlerID':  last_over_bowler_id,
     })
+
+
+def enforce_bowler_rules(conn, match_id, innings, match_format, over, ball, bowler):
+    """ICC rule checks: no consecutive overs by the same bowler, and a
+    per-format cap on the number of overs a single bowler may deliver."""
+    if ball != 1 or over <= 1:
+        return None
+
+    prev_over_row = conn.execute('''
+        SELECT bowlerID FROM BallByBall
+        WHERE matchID=? AND inningsNumber=? AND overNumber=?
+        ORDER BY ballID DESC LIMIT 1
+    ''', (match_id, innings, over - 1)).fetchone()
+    if prev_over_row and prev_over_row['bowlerID'] == bowler:
+        return 'The same bowler cannot bowl two consecutive overs'
+
+    max_overs = MAX_OVERS_PER_BOWLER.get(match_format)
+    if max_overs is not None:
+        legal = conn.execute('''
+            SELECT SUM(CASE WHEN (extraType IS NULL OR extraType NOT IN ('Wide','NoBall','Retired'))
+                            THEN 1 ELSE 0 END) AS legalBalls
+            FROM BallByBall WHERE matchID=? AND inningsNumber=? AND bowlerID=?
+        ''', (match_id, innings, bowler)).fetchone()['legalBalls'] or 0
+        if (legal // 6) >= max_overs:
+            return f'Bowler has already bowled the maximum {max_overs} overs allowed in {match_format}'
+    return None
 
 
 @app.route('/api/balls', methods=['POST'])
@@ -1124,22 +1195,31 @@ def add_ball():
     bowler        = d['bowlerID']
     runs          = int(d['runsScored'])
     extras        = int(d.get('extras', 0))
-    extra_type    = d.get('extraType') or None       # Wide, NoBall, Bye, LegBye, Penalty
+    extra_type    = d.get('extraType') or None       # Wide, NoBall, Bye, LegBye, Penalty, Retired
     wicket        = 1 if d.get('wicketFallen') else 0
     dismissed     = d.get('dismissedPlayerID') or None
-    wicket_type   = d.get('wicketType') or None      # Bowled, Caught, LBW, ...
+    wicket_type   = d.get('wicketType') or None      # Bowled, Caught, LBW, RetiredHurt, ...
+    fielder       = d.get('fielderID') or None
 
     try:
         with get_db() as conn:
+            match_row = conn.execute('SELECT matchFormat FROM Matches WHERE matchID=?', (match_id,)).fetchone()
+            if not match_row:
+                return jsonify({'error': 'Match not found'}), 404
+
+            rule_error = enforce_bowler_rules(conn, match_id, innings, match_row['matchFormat'], over, ball, bowler)
+            if rule_error:
+                return jsonify({'error': rule_error}), 400
+
             conn.execute('''
                 INSERT INTO BallByBall
                   (matchID, inningsNumber, overNumber, ballNumber,
                    batsmanID, bowlerID, runsScored, extras, extraType,
-                   wicketFallen, dismissedPlayerID, wicketType)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                   wicketFallen, dismissedPlayerID, wicketType, fielderID)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
             ''', (match_id, innings, over, ball,
                   batsman, bowler, runs, extras, extra_type,
-                  wicket, dismissed, wicket_type))
+                  wicket, dismissed, wicket_type, fielder))
 
             # ── update match score totals ─────────────────────
             total_runs = conn.execute('''
@@ -1191,16 +1271,17 @@ def update_ball(ball_id):
     wicket        = 1 if d.get('wicketFallen') else 0
     dismissed     = d.get('dismissedPlayerID') or None
     wicket_type   = d.get('wicketType') or None
+    fielder       = d.get('fielderID') or None
 
     try:
         with get_db() as conn:
             conn.execute('''
                 UPDATE BallByBall
                 SET batsmanID=?, bowlerID=?, runsScored=?, extras=?, extraType=?,
-                    wicketFallen=?, dismissedPlayerID=?, wicketType=?
+                    wicketFallen=?, dismissedPlayerID=?, wicketType=?, fielderID=?
                 WHERE ballID=?
             ''', (batsman, bowler, runs, extras, extra_type,
-                  wicket, dismissed, wicket_type, ball_id))
+                  wicket, dismissed, wicket_type, fielder, ball_id))
 
             # ── update match score totals ─────────────────────
             total_runs = conn.execute('''

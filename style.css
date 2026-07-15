@@ -8,31 +8,35 @@
 
 /* ─── Design Tokens ─── */
 :root {
-    --bg-dark:         #030a03;
-    --bg-surface:      #060f06;
-    --primary:         #16a34a;
-    --primary-dark:    #15803d;
-    --primary-light:   #22c55e;
+    --bg-dark:         #020802;
+    --bg-surface:      #050c05;
+    --primary:         #0ea5e9; /* Changed to a professional rich blue/teal base, but kept neon green accents where appropriate, or maybe keep green but professionalized */
+    --primary-dark:    #0369a1;
+    --primary-light:   #38bdf8;
     --gold:            #fbbf24;
     --gold-bright:     #fcd34d;
     --gold-dark:       #f59e0b;
-    --red-ball:        #dc2626;
-    --red-ball-light:  #ef4444;
+    --red-ball:        #ef4444;
+    --red-ball-light:  #f87171;
     --success:         #22c55e;
-    --danger:          #dc2626;
-    --card-bg:         rgba(22, 163, 74, 0.07);
-    --card-border:     rgba(34, 197, 94, 0.18);
-    --text:            #f0fdf4;
-    --text-muted:      #86efac;
-    --gradient-main:   linear-gradient(135deg, #16a34a 0%, #fbbf24 100%);
+    --danger:          #ef4444;
+    --flame:           #ff4500;
+    --flame-light:     #ffa500;
+    --card-bg:         rgba(15, 23, 42, 0.4);
+    --card-border:     rgba(56, 189, 248, 0.15);
+    --text:            #f8fafc;
+    --text-muted:      #94a3b8;
+    --gradient-main:   linear-gradient(135deg, #0ea5e9 0%, #fbbf24 100%);
     --gradient-gold:   linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-    --gradient-green:  linear-gradient(135deg, #16a34a 0%, #15803d 100%);
-    --gradient-cyber:  linear-gradient(135deg, #00ff87 0%, #16a34a 100%);
-    --gradient-red:    linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+    --gradient-green:  linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    --gradient-cyber:  linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+    --gradient-red:    linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    --gradient-flame:  linear-gradient(135deg, #ff4500 0%, #ffa500 100%);
     --neon-green:      #00ff87;
+    --neon-blue:       #38bdf8;
     --neon-gold:       #ffd700;
-    --radius-card:     20px;
-    --radius-input:    10px;
+    --radius-card:     16px;
+    --radius-input:    8px;
     --transition:      all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1326,4 +1330,64 @@ tbody td {
     0% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.4; transform: scale(1.2); }
     100% { opacity: 1; transform: scale(1); }
+}
+
+/* ════════════════════════════════════════════
+   CUSTOM CONFIRM MODAL (Toast Style)
+════════════════════════════════════════════ */
+.custom-confirm-overlay {
+    position: fixed; inset: 0;
+    background: rgba(2,8,2,0.85);
+    backdrop-filter: blur(12px);
+    z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.custom-confirm-card {
+    background: var(--card-bg);
+    border: 1px solid var(--primary-light);
+    border-radius: var(--radius-card);
+    padding: 2rem;
+    max-width: 420px; width: 90%;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(14,165,233,0.2);
+    animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.custom-confirm-card p {
+    font-size: 1.1rem; color: var(--text);
+    margin-bottom: 2rem; font-weight: 500;
+}
+
+.custom-confirm-actions {
+    display: flex; gap: 1rem;
+}
+
+.custom-confirm-actions button {
+    flex: 1;
+}
+
+/* ════════════════════════════════════════════
+   FLAME EFFECTS
+════════════════════════════════════════════ */
+@keyframes flameGlow {
+    0% { box-shadow: 0 0 15px rgba(255, 69, 0, 0.5), 0 0 25px rgba(255, 140, 0, 0.4), inset 0 0 10px rgba(255, 69, 0, 0.3); }
+    50% { box-shadow: 0 0 25px rgba(255, 140, 0, 0.8), 0 0 35px rgba(255, 69, 0, 0.6), inset 0 0 15px rgba(255, 140, 0, 0.5); }
+    100% { box-shadow: 0 0 15px rgba(255, 69, 0, 0.5), 0 0 25px rgba(255, 140, 0, 0.4), inset 0 0 10px rgba(255, 69, 0, 0.3); }
+}
+
+@keyframes flameText {
+    0% { text-shadow: 0 0 5px #ff4500, 0 0 15px #ff8c00; color: #fff; }
+    50% { text-shadow: 0 0 15px #ff4500, 0 0 25px #ffa500; color: #ffebcd; }
+    100% { text-shadow: 0 0 5px #ff4500, 0 0 15px #ff8c00; color: #fff; }
+}
+
+.flame-effect {
+    animation: flameGlow 1.5s infinite alternate !important;
+    border-color: #ff8c00 !important;
+    background: linear-gradient(135deg, rgba(255,69,0,0.1), rgba(255,140,0,0.2)) !important;
+}
+.flame-text {
+    animation: flameText 1.5s infinite alternate !important;
 }

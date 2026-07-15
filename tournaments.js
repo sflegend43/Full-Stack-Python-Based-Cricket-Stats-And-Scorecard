@@ -120,7 +120,7 @@ async function loadTournaments() {
 }
 
 async function deleteTournament(name) {
-    if(!confirm(`Are you sure you want to delete ${name}?`)) return;
+    if(!await customConfirm(`Are you sure you want to delete ${name}?`)) return;
     try {
         const res = await authFetch(`${API}/api/tournaments/${encodeURIComponent(name)}`, { method: 'DELETE' });
         if(res.ok) {
@@ -313,4 +313,31 @@ async function viewTournamentSquad(tournamentName, teamName) {
     } catch {
         showToast('Failed to load squad', 'error');
     }
+}
+
+// ─── Custom Confirm Modal ───
+function customConfirm(msg) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'custom-confirm-overlay';
+        overlay.innerHTML = `
+            <div class="custom-confirm-card">
+                <p>${msg}</p>
+                <div class="custom-confirm-actions">
+                    <button class="btn-cancel" id="cc-cancel">Cancel</button>
+                    <button class="btn-submit flame-effect" id="cc-confirm">Confirm</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('#cc-cancel').onclick = () => {
+            document.body.removeChild(overlay);
+            resolve(false);
+        };
+        overlay.querySelector('#cc-confirm').onclick = () => {
+            document.body.removeChild(overlay);
+            resolve(true);
+        };
+    });
 }
