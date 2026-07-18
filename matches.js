@@ -752,6 +752,9 @@ async function openBallEntry() {
         currentStriker   = data.strikerID   || null;
         currentNonStriker = data.nonStrikerID || null;
         currentBowler    = data.bowlerID    || null;
+        // If the restored striker was dismissed, force new batter selection
+        pendingNewBatter = currentStriker && beDismissedIDs.includes(currentStriker);
+        if (pendingNewBatter) currentStriker = null;
         populateBallDropdowns();
 
         updateScoreboardStrip(data.totalRuns, data.wickets, lsCurrentOver, lsCurrentBall);
@@ -764,6 +767,8 @@ async function openBallEntry() {
         // Only prompt for openers when we have no persisted context at all
         if (!currentStriker || !currentBowler) {
             openContextModal('innings_start');
+        } else if (pendingNewBatter) {
+            openContextModal('wicket');
         }
 
         lsRefreshStats();
@@ -935,6 +940,15 @@ function openContextModal(mode, isEndOver = false) {
     modal.style.display = 'flex';
 }
 
+function cancelContextModal() {
+    document.getElementById('contextModal').style.display = 'none';
+    if (contextMode === 'wicket' && pendingNewBatter) {
+        currentStriker = null;
+        persistContext();
+        showToast('New batter must be selected before recording more balls.', 'error');
+    }
+}
+
 function confirmContext() {
     const s = document.getElementById('ctx-striker').value;
     const ns = document.getElementById('ctx-nonstriker').value;
@@ -954,6 +968,7 @@ function confirmContext() {
         } else {
             currentStriker = s;
         }
+        pendingNewBatter = false;
     }
 
     document.getElementById('contextModal').style.display = 'none';
@@ -1102,6 +1117,7 @@ async function updateTimeline() {
 // ── Numpad Actions ──
 
 function lsRecordRun(runs) {
+    if (pendingNewBatter) { openContextModal('wicket'); return; }
     beRuns = runs;
     beDelType = 'Normal';
     lsExtraType = null;
@@ -1110,6 +1126,7 @@ function lsRecordRun(runs) {
 }
 
 function lsOpenExtraModal(type) {
+    if (pendingNewBatter) { openContextModal('wicket'); return; }
     if (type === 'Penalty') {
         lsExtraType = 'Penalty';
         lsExtraRuns = 5;
