@@ -41,6 +41,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await loadTeamsOptions();
     await loadTournaments();
+
+    // Auto-refresh when data changes on other pages
+    if (window.DataSync) {
+        DataSync.on('ball-recorded', () => loadTournaments());
+        DataSync.on('match-completed', () => loadTournaments());
+        DataSync.on('match-created', () => loadTournaments());
+        DataSync.on('data-changed', () => loadTournaments());
+    }
 });
 
 function toggleForm() {
@@ -98,6 +106,7 @@ async function loadTournaments() {
                 <td>${t.overs}</td>
                 <td style="font-size:0.85rem; color:var(--text-muted); min-width:200px;">${teamsHtml}</td>
                 <td style="display:flex; gap:0.4rem; justify-content:center;">
+                    <button class="btn-view" style="font-size: 0.75rem;" onclick="viewStandings('${t.tournamentName.replace(/'/g, "\\'")}')">Standings</button>
                     ${getUser()?.isAdmin ? `
                     <button class="btn-view" style="font-size: 0.75rem;" onclick="startSquadSelection('${t.tournamentName.replace(/'/g, "\\'")}', ${JSON.stringify(t.teams || []).replace(/"/g, '&quot;')})">Manage Squads</button>
                     <button class="btn-delete" style="font-size: 0.75rem; padding: 0.4rem;" onclick="deleteTournament('${t.tournamentName.replace(/'/g, "\\'")}')">🗑</button>
@@ -116,6 +125,60 @@ async function loadTournaments() {
         }
     } catch {
         showToast('Failed to load tournaments', 'error');
+    }
+}
+
+async function viewStandings(name) {
+    try {
+        const res = await authFetch(`${API}/api/tournaments/${encodeURIComponent(name)}/standings`);
+        const data = await res.json();
+        document.getElementById('standingsTitle').textContent = `${name} — Standings`;
+        const content = document.getElementById('standingsContent');
+        if (!data.length) {
+            content.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:2rem;">No matches played yet in this tournament.</p>';
+        } else {
+            content.innerHTML = `
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Team</th>
+                            <th>P</th>
+                            <th>W</th>
+                            <th>L</th>
+                            <th>N/R</th>
+                            <th>Pts</th>
+                            <th>Runs For</th>
+                            <th>Wkts</th>
+                            <th>Runs Agst</th>
+                            <th>NRR</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(r => `
+                        <tr>
+                            <td style="font-weight:700; color:var(--gold-bright);">${r.rank}</td>
+                            <td style="font-weight:600;">${r.teamName}</td>
+                            <td>${r.played || 0}</td>
+                            <td style="color:var(--neon-green); font-weight:600;">${r.wins || 0}</td>
+                            <td style="color:var(--red-ball-light);">${r.losses || 0}</td>
+                            <td style="color:var(--text-muted);">${r.noResult || 0}</td>
+                            <td style="font-weight:700; color:var(--primary-light);">${r.points || 0}</td>
+                            <td>${r.runsScored || 0}</td>
+                            <td>${r.wicketsLost || 0}</td>
+                            <td>${r.runsConceded || 0}</td>
+                            <td style="color:${r.nrr > 0 ? 'var(--neon-green)' : r.nrr < 0 ? 'var(--red-ball-light)' : 'var(--text-muted)'}; font-weight:600;">${r.nrr > 0 ? '+' : ''}${r.nrr}</td>
+                        </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+            `;
+        }
+        document.getElementById('standingsModal').style.display = 'flex';
+    } catch {
+        showToast('Failed to load standings', 'error');
     }
 }
 

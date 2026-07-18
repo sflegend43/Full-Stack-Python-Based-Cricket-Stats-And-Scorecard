@@ -215,6 +215,16 @@ def init_db():
                 FOREIGN KEY (teamName)       REFERENCES Team(teamName),
                 FOREIGN KEY (playerID)       REFERENCES Players(playerID)
             );
+
+            CREATE TABLE IF NOT EXISTS MatchState (
+                matchID       INTEGER NOT NULL,
+                inningsNumber INTEGER NOT NULL CHECK(inningsNumber BETWEEN 1 AND 4),
+                strikerID     TEXT,
+                nonStrikerID  TEXT,
+                bowlerID      TEXT,
+                PRIMARY KEY (matchID, inningsNumber),
+                FOREIGN KEY (matchID) REFERENCES Matches(matchID)
+            );
         ''')
 
         # Migrations
@@ -237,6 +247,21 @@ def init_db():
             conn.execute('ALTER TABLE BallByBall ADD COLUMN fielderID TEXT')
         except sqlite3.OperationalError:
             pass # column already exists
+
+        try:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS MatchState (
+                    matchID       INTEGER NOT NULL,
+                    inningsNumber INTEGER NOT NULL CHECK(inningsNumber BETWEEN 1 AND 4),
+                    strikerID     TEXT,
+                    nonStrikerID  TEXT,
+                    bowlerID      TEXT,
+                    PRIMARY KEY (matchID, inningsNumber),
+                    FOREIGN KEY (matchID) REFERENCES Matches(matchID)
+                )
+            ''')
+        except sqlite3.OperationalError:
+            pass # table already exists
 
 # ─────────────────────────────────────────────────────
 # Static Page Routes
@@ -844,7 +869,8 @@ def leaderboard():
             SELECT b.bowlerID AS playerID, p.playerName, p.playerNationality,
                    SUM(CASE WHEN b.wicketFallen=1 AND (b.wicketType IS NULL OR b.wicketType != 'RetiredOut')
                             THEN 1 ELSE 0 END) AS wickets,
-                   SUM(CASE WHEN b.extraType='Retired' THEN 0 ELSE 1 END) AS ballsBowled,
+                   SUM(CASE WHEN (b.extraType IS NULL OR b.extraType NOT IN ('Wide','NoBall','Retired'))
+                            THEN 1 ELSE 0 END) AS ballsBowled,
                    SUM(b.runsScored+b.extras) AS runsConceded
             FROM BallByBall b
             JOIN Players p ON b.bowlerID = p.playerID
@@ -895,15 +921,20 @@ def scorecard(match_id):
         def get_bowling(innings_num):
             return conn.execute('''
                 SELECT b.bowlerID, p.playerName,
-                       SUM(CASE WHEN b.extraType='Retired' THEN 0 ELSE 1 END) AS balls,
-                       SUM(b.runsScored+b.extras) AS runs,
+                       SUM(CASE WHEN (b.extraType IS NULL OR b.extraType NOT IN ('Wide','NoBall','Retired'))
+                                THEN 1 ELSE 0 END) AS ballsBowled,
+                       SUM(b.runsScored+b.extras) AS runsConceded,
                        SUM(CASE WHEN b.wicketFallen=1 AND (b.wicketType IS NULL OR b.wicketType != 'RetiredOut')
-                                THEN 1 ELSE 0 END) AS wickets,
-                       SUM(b.extras)               AS extras
+                                THEN 1 ELSE 0 END) AS wicketsTaken,
+                       SUM(CASE WHEN (b.extraType IS NULL OR b.extraType NOT IN ('Wide','NoBall','Retired'))
+                                THEN b.extras ELSE 0 END) AS extras,
+                       SUM(CASE WHEN (b.extraType IS NULL OR b.extraType NOT IN ('Wide','NoBall','Retired'))
+                                    AND b.wicketFallen=0 AND b.runsScored=0
+                                    AND (b.extras=0 OR b.extras IS NULL) THEN 1 ELSE 0 END) AS maidens
                 FROM BallByBall b
                 JOIN Players p ON b.bowlerID = p.playerID
                 WHERE b.matchID=? AND b.inningsNumber=?
-                GROUP BY b.bowlerID ORDER BY wickets DESC
+                GROUP BY b.bowlerID ORDER BY wicketsTaken DESC
             ''', (match_id, innings_num)).fetchall()
 
         def get_playing_xi(team_name):
@@ -1059,7 +1090,7 @@ def get_ball_state(match_id):
                         THEN 1 ELSE 0 END AS canBowl
             FROM PlayingXI px JOIN Players p ON px.playerID = p.playerID
             WHERE px.matchID=?
-            ORDER BY p.playerName
+            ORDER BY px.rowid
         ''', (match_id,)).fetchall()
 
         match = conn.execute('SELECT * FROM Matches WHERE matchID=?', (match_id,)).fetchone()
@@ -1104,6 +1135,29 @@ def get_ball_state(match_id):
             if prev_over_row:
                 last_over_bowler_id = prev_over_row['bowlerID']
 
+        # Persisted current context (striker / non-striker / bowler). Falls back to the
+        # last recorded ball for striker & bowler so pre-existing data still restores.
+        state_row = conn.execute('''
+            SELECT strikerID, nonStrikerID, bowlerID FROM MatchState
+            WHERE matchID=? AND inningsNumber=?
+        ''', (match_id, innings)).fetchone()
+
+        striker_id = state_row['strikerID'] if state_row else None
+        nonstriker_id = state_row['nonStrikerID'] if state_row else None
+        bowler_id = state_row['bowlerID'] if state_row else None
+
+        if striker_id is None or bowler_id is None:
+            last_ball = conn.execute('''
+                SELECT batsmanID, bowlerID FROM BallByBall
+                WHERE matchID=? AND inningsNumber=?
+                ORDER BY ballID DESC LIMIT 1
+            ''', (match_id, innings)).fetchone()
+            if last_ball:
+                if striker_id is None:
+                    striker_id = last_ball['batsmanID']
+                if bowler_id is None:
+                    bowler_id = last_ball['bowlerID']
+
     batting_team = None
     bowling_team = None
     if match:
@@ -1146,7 +1200,39 @@ def get_ball_state(match_id):
         'bowlerOvers':       bowler_overs,
         'maxOversPerBowler': max_overs,
         'lastOverBowlerID':  last_over_bowler_id,
+        'strikerID':          striker_id,
+        'nonStrikerID':       nonstriker_id,
+        'bowlerID':           bowler_id,
     })
+
+
+def save_match_state(conn, match_id, innings, striker_id, nonstriker_id, bowler_id):
+    """Upsert the current innings context (striker / non-striker / bowler)."""
+    conn.execute('''
+        INSERT INTO MatchState (matchID, inningsNumber, strikerID, nonStrikerID, bowlerID)
+        VALUES (?,?,?,?,?)
+        ON CONFLICT(matchID, inningsNumber) DO UPDATE SET
+            strikerID=excluded.strikerID,
+            nonStrikerID=excluded.nonStrikerID,
+            bowlerID=excluded.bowlerID
+    ''', (match_id, innings, striker_id, nonstriker_id, bowler_id))
+
+
+@app.route('/api/balls/state/<int:match_id>', methods=['PUT'])
+@requires_admin
+def put_ball_state(match_id):
+    """Persist the current innings context (striker / non-striker / bowler)."""
+    d = request.get_json(silent=True) or {}
+    innings = int(d.get('inningsNumber', 1))
+    try:
+        with get_db() as conn:
+            save_match_state(
+                conn, match_id, innings,
+                d.get('strikerID'), d.get('nonStrikerID'), d.get('bowlerID')
+            )
+        return jsonify({'message': 'Context saved'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 def enforce_bowler_rules(conn, match_id, innings, match_format, over, ball, bowler):
@@ -1193,6 +1279,7 @@ def add_ball():
     ball          = int(d['ballNumber'])
     batsman       = d['batsmanID']
     bowler        = d['bowlerID']
+    nonstriker    = d.get('nonStrikerID') or None
     runs          = int(d['runsScored'])
     extras        = int(d.get('extras', 0))
     extra_type    = d.get('extraType') or None       # Wide, NoBall, Bye, LegBye, Penalty, Retired
@@ -1220,6 +1307,9 @@ def add_ball():
             ''', (match_id, innings, over, ball,
                   batsman, bowler, runs, extras, extra_type,
                   wicket, dismissed, wicket_type, fielder))
+
+            # Persist current innings context so it auto-restores on reload
+            save_match_state(conn, match_id, innings, batsman, nonstriker, bowler)
 
             # ── update match score totals ─────────────────────
             total_runs = conn.execute('''
@@ -1445,6 +1535,134 @@ def get_pvt():
         ''', (p['playerID'], team, team)).fetchone()['runs'] or 0
         
     return jsonify({'runs': runs, 'team': team})
+
+# ─────────────────────────────────────────────────────
+# Match Completion
+# ─────────────────────────────────────────────────────
+@app.route('/api/matches/<int:match_id>/complete', methods=['PUT'])
+@requires_admin
+def complete_match(match_id):
+    d = request.get_json(silent=True) or {}
+    winner = (d.get('winnerName') or '').strip() or None
+    margin = (d.get('winMargin') or '').strip() or None
+    try:
+        with get_db() as conn:
+            match = conn.execute('SELECT * FROM Matches WHERE matchID=?', (match_id,)).fetchone()
+            if not match:
+                return jsonify({'error': 'Match not found'}), 404
+            conn.execute('UPDATE Matches SET winnerName=?, winMargin=? WHERE matchID=?',
+                         (winner, margin, match_id))
+        return jsonify({'message': 'Match completed', 'winnerName': winner, 'winMargin': margin})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ─────────────────────────────────────────────────────
+# Tournament Standings
+# ─────────────────────────────────────────────────────
+@app.route('/api/tournaments/<path:name>/standings', methods=['GET'])
+def tournament_standings(name):
+    with get_db() as conn:
+        teams = conn.execute(
+            'SELECT teamName FROM TournamentTeams WHERE tournamentName=?', (name,)
+        ).fetchall()
+        if not teams:
+            return jsonify([])
+
+        team_names = [t['teamName'] for t in teams]
+        placeholders = ','.join('?' * len(team_names))
+        rows = conn.execute(f'''
+            SELECT
+                t.teamName,
+                COUNT(m.matchID) AS played,
+                SUM(CASE WHEN m.winnerName = t.teamName THEN 1 ELSE 0 END) AS wins,
+                SUM(CASE WHEN m.winnerName IS NOT NULL AND m.winnerName != t.teamName THEN 1 ELSE 0 END) AS losses,
+                SUM(CASE WHEN m.winnerName IS NULL AND
+                    (m.team1Name = t.teamName OR m.team2Name = t.teamName) THEN 1 ELSE 0 END) AS noResult,
+                SUM(CASE
+                    WHEN m.team1Name = t.teamName THEN m.team1TotalRuns
+                    WHEN m.team2Name = t.teamName THEN m.team2TotalRuns
+                    ELSE 0
+                END) AS runsScored,
+                SUM(CASE
+                    WHEN m.team1Name = t.teamName THEN m.team1TotalWickets
+                    WHEN m.team2Name = t.teamName THEN m.team2TotalWickets
+                    ELSE 0
+                END) AS wicketsLost,
+                SUM(CASE
+                    WHEN m.team1Name = t.teamName THEN COALESCE(m.team2TotalRuns, 0)
+                    WHEN m.team2Name = t.teamName THEN COALESCE(m.team1TotalRuns, 0)
+                    ELSE 0
+                END) AS runsConceded
+            FROM Team t
+            LEFT JOIN Matches m ON (t.teamName = m.team1Name OR t.teamName = m.team2Name)
+            WHERE t.teamName IN ({placeholders})
+            GROUP BY t.teamName
+            ORDER BY wins DESC, runsScored DESC
+        ''', team_names).fetchall()
+
+        result = []
+        for i, r in enumerate(rows):
+            d = dict(r)
+            d['rank'] = i + 1
+            d['points'] = (d['wins'] or 0) * 2
+            d['nrr'] = 0.0
+            if d['runsScored'] and d['runsConceded']:
+                d['nrr'] = round(((d['runsScored'] or 0) - (d['runsConceded'] or 0)) / max(d['played'] or 1, 1), 2)
+            result.append(d)
+        return jsonify(result)
+
+# ─────────────────────────────────────────────────────
+# Player Stats (all players with aggregate stats)
+# ─────────────────────────────────────────────────────
+@app.route('/api/players/stats', methods=['GET'])
+def all_player_stats():
+    with get_db() as conn:
+        rows = conn.execute('''
+            SELECT
+                p.playerID, p.playerName, p.playerDOB, p.playerNationality,
+                p.battingStyle, p.bowlingStyle, p.playerRole,
+                COALESCE(bat.runs, 0) AS totalRuns,
+                COALESCE(bat.balls, 0) AS ballsFaced,
+                COALESCE(bat.fours, 0) AS fours,
+                COALESCE(bat.sixes, 0) AS sixes,
+                COALESCE(bat.dismissals, 0) AS dismissals,
+                COALESCE(bowl.balls, 0) AS ballsBowled,
+                COALESCE(bowl.runsConceded, 0) AS runsConceded,
+                COALESCE(bowl.wickets, 0) AS totalWickets,
+                COALESCE(bowl.maidens, 0) AS maidens,
+                COALESCE(m.played, 0) AS matchesPlayed,
+                COALESCE(t.teamName, '') AS teamName
+            FROM Players p
+            LEFT JOIN (
+                SELECT batsmanID,
+                       SUM(runsScored) AS runs,
+                       COUNT(*) AS balls,
+                       SUM(CASE WHEN runsScored=4 THEN 1 ELSE 0 END) AS fours,
+                       SUM(CASE WHEN runsScored=6 THEN 1 ELSE 0 END) AS sixes,
+                       SUM(wicketFallen) AS dismissals
+                FROM BallByBall GROUP BY batsmanID
+            ) bat ON p.playerID = bat.batsmanID
+            LEFT JOIN (
+                SELECT bowlerID,
+                       SUM(CASE WHEN (extraType IS NULL OR extraType NOT IN ('Wide','NoBall','Retired'))
+                                THEN 1 ELSE 0 END) AS balls,
+                       SUM(runsScored+extras) AS runsConceded,
+                       SUM(wicketFallen) AS wickets,
+                       SUM(CASE WHEN (extraType IS NULL OR extraType NOT IN ('Wide','NoBall','Retired'))
+                                    AND wicketFallen=0 AND runsScored=0 AND (extras=0 OR extras IS NULL)
+                                THEN 1 ELSE 0 END) AS maidens
+                FROM BallByBall GROUP BY bowlerID
+            ) bowl ON p.playerID = bowl.bowlerID
+            LEFT JOIN (
+                SELECT playerID, COUNT(DISTINCT matchID) AS played
+                FROM PlayingXI GROUP BY playerID
+            ) m ON p.playerID = m.playerID
+            LEFT JOIN PlayingXI pi ON p.playerID = pi.playerID
+            LEFT JOIN Team t ON pi.teamName = t.teamName
+            GROUP BY p.playerID
+            ORDER BY totalRuns DESC
+        ''').fetchall()
+        return jsonify([dict(r) for r in rows])
 
 # ─────────────────────────────────────────────────────
 # Error Handlers

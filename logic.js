@@ -80,6 +80,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     ]);
 });
 
+// ─── Auto-refresh when data changes on other pages ───
+if (window.DataSync) {
+    DataSync.on('ball-recorded', refreshDashboard);
+    DataSync.on('match-completed', refreshDashboard);
+    DataSync.on('match-created', refreshDashboard);
+    DataSync.on('data-changed', refreshDashboard);
+}
+
+function refreshDashboard() {
+    loadOverview();
+    loadRecentMatches();
+    loadLeaderboards();
+    loadTournaments();
+    loadCompletedTournaments();
+}
+
 // ─── Tournaments ───
 async function loadTournaments() {
     try {

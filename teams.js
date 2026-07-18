@@ -55,6 +55,15 @@ const FLAG_MAP = {
     England:      '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
 };
 
+const FEATURED_PLAYERS = {
+    'Pakistan Cricket Team': 'Babar Azam',
+    'Indian Cricket Team': 'Virat Kohli',
+    'Australian Cricket Team': 'Steve Smith',
+    'New Zealand Cricket Team': 'Kane Williamson',
+    'West Indies Cricket Team': 'Rovman Powell',
+    'South Africa Cricket Team': 'Aiden Markram'
+};
+
 // ─── Init ───
 document.addEventListener('DOMContentLoaded', async () => {
     const user = getUser();
@@ -66,6 +75,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (avatarEl) avatarEl.textContent = (user.fullname || 'A')[0].toUpperCase();
 
     await loadTeams();
+
+    // Auto-refresh when data changes on other pages
+    if (window.DataSync) {
+        DataSync.on('ball-recorded', () => loadTeams());
+        DataSync.on('match-completed', () => loadTeams());
+        DataSync.on('match-created', () => loadTeams());
+        DataSync.on('data-changed', () => loadTeams());
+    }
 });
 
 // ─── Load Teams ───
@@ -226,18 +243,57 @@ function renderTeamDetail(data) {
             </div>
         </div>`;
 
-    // Squad table
-    const squadTb = document.getElementById('squad-tbody');
+    // Squad with featured player
+    const rosterEl = document.getElementById('roster-content');
+    const featuredName = FEATURED_PLAYERS[t.teamName] || null;
+    const placeholder = 'dummy.png';
+
+    let squadRows = '';
     if (data.squad.length) {
-        squadTb.innerHTML = data.squad.map(p => `
+        squadRows = data.squad.map(p => `
             <tr>
                 <td><strong>${p.playerName}</strong></td>
                 <td>${roleBadge(p.playerRole)}</td>
                 <td style="color:var(--text-muted); font-size:0.8rem;">${p.playerDOB}</td>
             </tr>`).join('');
     } else {
-        squadTb.innerHTML = `<tr><td colspan="3" class="empty-state">No squad data.</td></tr>`;
+        squadRows = `<tr><td colspan="3" class="empty-state">No squad data.</td></tr>`;
     }
+
+    const featuredImg = featuredName ? `Players Pics/${featuredName}.png` : null;
+    const featuredCrop = featuredName ? `Players Pics/${featuredName} crop.png` : null;
+
+    rosterEl.innerHTML = featuredName ? `
+        <div class="team-roster-grid">
+            <div class="team-roster-hero">
+                <img class="team-roster-hero-img" src="${featuredImg}" alt="${featuredName}"
+                     onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='${featuredCrop}'}else{this.src='${placeholder}'}">
+            </div>
+            <div class="team-roster-list">
+                <div class="table-scroll" style="max-height: 320px; overflow-y: auto;">
+                    <table>
+                        <thead><tr><th>Name</th><th>Role</th><th>DOB</th></tr></thead>
+                        <tbody>${squadRows}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    ` : `
+        <div class="team-roster-grid">
+            <div class="team-roster-hero team-roster-empty">
+                <div class="team-roster-empty-icon">🏏</div>
+                <div class="team-roster-empty-text">Featured player coming soon</div>
+            </div>
+            <div class="team-roster-list">
+                <div class="table-scroll" style="max-height: 320px; overflow-y: auto;">
+                    <table>
+                        <thead><tr><th>Name</th><th>Role</th><th>DOB</th></tr></thead>
+                        <tbody>${squadRows}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
 
     // Match History
     const matchTb = document.getElementById('team-matches-tbody');

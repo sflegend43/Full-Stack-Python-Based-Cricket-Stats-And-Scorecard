@@ -12,6 +12,15 @@ async function authFetch(url, options = {}) {
 
 const API = 'http://localhost:5001';
 
+// ── Data Sync: refresh matches list when other tabs make changes ──
+if (window.DataSync) {
+    DataSync.on('ball-recorded', () => { loadMatches(); });
+    DataSync.on('match-completed', () => { loadMatches(); });
+    DataSync.on('data-changed', (d) => {
+        if (d && d.section === 'matches') loadMatches();
+    });
+}
+
 // ── State ──────────────────────────────────────────────
 let allMatches      = [];
 let currentFormat   = '';
@@ -224,14 +233,14 @@ function renderBowlTable(tbId, rows) {
         return;
     }
     tb.innerHTML = rows.map(r => {
-        const overs = r.balls ? Math.floor(r.balls / 6) + '.' + (r.balls % 6) : '0';
-        const econ  = r.balls ? ((r.runs / r.balls) * 6).toFixed(2) : '0.00';
+        const overs = r.ballsBowled ? Math.floor(r.ballsBowled / 6) + '.' + (r.ballsBowled % 6) : '0';
+        const econ  = r.ballsBowled ? ((r.runsConceded / r.ballsBowled) * 6).toFixed(2) : '0.00';
         return `<tr>
             <td><strong>${r.playerName}</strong></td>
             <td>${overs}</td>
-            <td>${r.runs}</td>
-            <td><strong style="color:var(--red-ball-light);">${r.wickets}</strong></td>
-            <td>${r.extras}</td>
+            <td>${r.runsConceded}</td>
+            <td><strong style="color:var(--red-ball-light);">${r.wicketsTaken}</strong></td>
+            <td>${r.maidens || 0}</td>
             <td style="color:var(--text-muted);">${econ}</td>
         </tr>`;
     }).join('');
@@ -384,7 +393,7 @@ async function deleteMatch(mid) {
     if (!await customConfirm(`Delete Match #${mid}? All ball-by-ball data will also be removed.`)) return;
     try {
         const res = await authFetch(`${API}/api/matches/${mid}`, { method: 'DELETE' });
-        if (res.ok) { showToast(`Match #${mid} deleted.`); await loadMatches(); }
+        if (res.ok) { showToast(`Match #${mid} deleted.`); await loadMatches(); if (window.DataSync) DataSync.dataChanged('matches'); }
         else { const d = await res.json(); showToast(d.error || 'Delete failed', 'error'); }
     } catch { showToast('Server error.', 'error'); }
 }
@@ -699,6 +708,7 @@ async function handleMatchWizard(e) {
         
         closeAddMatchModal();
         await loadMatches();
+        if (window.DataSync) DataSync.matchCreated(body.matchID);
     } catch { showToast('Server error.', 'error'); }
 }
 
@@ -734,10 +744,16 @@ async function openBallEntry() {
         
         lsCurrentOver = data.nextOver || 1;
         lsCurrentBall = data.nextBall || 1;
-        
+
         if (data.battingTeam) currentBattingTeam = data.battingTeam;
         if (data.bowlingTeam) currentBowlingTeam = data.bowlingTeam;
-        
+
+        // Restore the persisted crease context (so batters/bowler auto-appear on reload)
+        currentStriker   = data.strikerID   || null;
+        currentNonStriker = data.nonStrikerID || null;
+        currentBowler    = data.bowlerID    || null;
+        populateBallDropdowns();
+
         updateScoreboardStrip(data.totalRuns, data.wickets, lsCurrentOver, lsCurrentBall);
 
         const battingLabel = document.getElementById('ls-batting-team');
@@ -745,10 +761,11 @@ async function openBallEntry() {
         if (battingLabel) battingLabel.textContent = `🏏 ${shortTeam(currentBattingTeam).toUpperCase()} BATTING`;
         if (bowlingLabel) bowlingLabel.textContent = `🎯 ${shortTeam(currentBowlingTeam).toUpperCase()} BOWLING`;
 
-        if (lsCurrentOver === 1 && lsCurrentBall === 1) {
+        // Only prompt for openers when we have no persisted context at all
+        if (!currentStriker || !currentBowler) {
             openContextModal('innings_start');
         }
-        
+
         lsRefreshStats();
         updateTimeline();
     } catch {
@@ -794,6 +811,7 @@ function currentBattersOptions() {
 // ── Context Modal (Striker, Non-Striker, Bowler) ──
 let wicketAtEndOver = false;
 let currentBattingTeam = null;
+let pendingNewBatter = false;
 
 function getMatchTeams() {
     const teams = new Set();
@@ -813,39 +831,67 @@ function filterContextPlayers(mode) {
     }
     const bowlingTeam = currentBowlingTeam || teams.find(t => t !== currentBattingTeam) || teams[0];
 
-    // Batters: exclude anyone already dismissed/retired this innings
-    const batOpts = bePlayers
-        .filter(p => p.teamName === currentBattingTeam && !beDismissedIDs.includes(p.playerID))
-        .map(p => `<option value="${p.playerID}">${p.playerName}</option>`).join('');
+    // Batters: ALL players from the batting team's XI (any player can bat,
+    // including bowlers). Dismissed shown struck-through + disabled.
+    // Sorted by role order to match the Playing XI display (renderXIBoxes).
+    const roleOrder = { 'Batsman': 1, 'WicketKeeper': 2, 'AllRounder': 3, 'Bowler': 4 };
+    const battingTeamPlayers = bePlayers
+        .filter(p => p.teamName === currentBattingTeam)
+        .sort((a, b) => (roleOrder[a.playerRole] || 99) - (roleOrder[b.playerRole] || 99));
 
-    // New-batter-after-wicket list additionally excludes whoever is still at the crease
-    const newBatterOpts = bePlayers
-        .filter(p => p.teamName === currentBattingTeam
-            && !beDismissedIDs.includes(p.playerID)
-            && p.playerID !== currentStriker && p.playerID !== currentNonStriker)
-        .map(p => `<option value="${p.playerID}">${p.playerName}</option>`).join('');
+    const batOpts = battingTeamPlayers.map(p => {
+        const dismissed = beDismissedIDs.includes(p.playerID);
+        const label = p.playerName + (dismissed ? ' (out)' : '');
+        return dismissed
+            ? `<option value="${p.playerID}" disabled style="text-decoration:line-through; color:#64748b;">${label}</option>`
+            : `<option value="${p.playerID}">${label}</option>`;
+    }).join('');
 
-    // Bowlers: must be able to bowl, belong to the bowling side, not have bowled the
-    // immediately preceding over, and not have already reached the format's over cap.
-    const bowlOpts = bePlayers
-        .filter(p => {
-            if (p.teamName !== bowlingTeam || !p.canBowl) return false;
-            if ((mode === 'new_over' || mode === 'end_over')) {
-                if (beLastOverBowlerID && p.playerID === beLastOverBowlerID) return false;
-                if (beMaxOversPerBowler != null && Math.floor(bowlerLegalBalls(p.playerID) / 6) >= beMaxOversPerBowler) return false;
-            }
-            return true;
-        })
-        .map(p => {
-            const legal = bowlerLegalBalls(p.playerID);
-            const oversTxt = `${Math.floor(legal / 6)}.${legal % 6}`;
-            return `<option value="${p.playerID}">${p.playerName} (${oversTxt} ov)</option>`;
-        }).join('');
+    // New-batter-after-wicket list: show ALL batting team players.
+    // - Dismissed: struck-through, disabled, "(out)"
+    // - Current non-striker at crease: disabled, "(playing)"
+    // - Available: selectable
+    const newBatterOpts = battingTeamPlayers.map(p => {
+        const dismissed = beDismissedIDs.includes(p.playerID);
+        const isNonStriker = p.playerID === currentNonStriker;
+        if (dismissed) {
+            return `<option value="${p.playerID}" disabled style="text-decoration:line-through; color:#64748b;">${p.playerName} (out)</option>`;
+        }
+        if (isNonStriker) {
+            return `<option value="${p.playerID}" disabled style="color:#64748b;">${p.playerName} (playing)</option>`;
+        }
+        return `<option value="${p.playerID}">${p.playerName}</option>`;
+    }).join('');
 
-    document.getElementById('ctx-striker').innerHTML = (mode === 'wicket' ? newBatterOpts : batOpts) || `<option value="">No batters available</option>`;
-    document.getElementById('ctx-nonstriker').innerHTML = batOpts || `<option value="">No batters found</option>`;
-    document.getElementById('ctx-bowler').innerHTML = bowlOpts || `<option value="">No eligible bowlers — ICC over limit reached</option>`;
-}
+        // Bowlers: eligible = can bowl + on the bowling side. Ineligible bowlers
+        // (just bowled the previous over, or have used up their over quota) are
+        // still SHOWN but rendered struck-through and disabled so the user can
+        // see why they cannot be selected.
+        const quotaTxt = beMaxOversPerBowler != null ? `/${beMaxOversPerBowler}` : '';
+        const bowlOpts = bePlayers
+            .filter(p => p.teamName === bowlingTeam && p.canBowl)
+            .map(p => {
+                const legal  = bowlerLegalBalls(p.playerID);
+                const ovBowled = Math.floor(legal / 6);
+                const balls   = legal % 6;
+                const oversTxt = `${ovBowled}.${balls}`;
+
+                let disabled = false, reason = '';
+                if ((mode === 'new_over' || mode === 'end_over') && beLastOverBowlerID && p.playerID === beLastOverBowlerID) {
+                    disabled = true; reason = ' (bowled last over)';
+                } else if (beMaxOversPerBowler != null && ovBowled >= beMaxOversPerBowler) {
+                    disabled = true; reason = ' (quota full)';
+                }
+                const label = `${p.playerName}  ${oversTxt}${quotaTxt} ov${reason}`;
+                return disabled
+                    ? `<option value="${p.playerID}" disabled style="text-decoration:line-through; color:#64748b;">${label}</option>`
+                    : `<option value="${p.playerID}">${label}</option>`;
+            }).join('');
+
+        document.getElementById('ctx-striker').innerHTML = (mode === 'wicket' ? newBatterOpts : batOpts) || `<option value="">No batters available</option>`;
+        document.getElementById('ctx-nonstriker').innerHTML = batOpts || `<option value="">No batters found</option>`;
+        document.getElementById('ctx-bowler').innerHTML = bowlOpts || `<option value="">No eligible bowlers</option>`;
+    }
 
 function openContextModal(mode, isEndOver = false) {
     contextMode = mode;
@@ -912,6 +958,7 @@ function confirmContext() {
 
     document.getElementById('contextModal').style.display = 'none';
     lsRefreshStats();
+    persistContext();
 
     if (contextMode === 'wicket' && wicketAtEndOver) {
         wicketAtEndOver = false;
@@ -919,11 +966,29 @@ function confirmContext() {
     }
 }
 
+// Persist the live crease context so it auto-restores on the next page load
+async function persistContext() {
+    if (!beMatchId) return;
+    try {
+        await authFetch(`${API}/api/balls/state/${beMatchId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                inningsNumber: beInnings,
+                strikerID:     currentStriker,
+                nonStrikerID:  currentNonStriker,
+                bowlerID:      currentBowler,
+            })
+        });
+    } catch {}
+}
+
 function manualSwapStriker() {
     let temp = currentStriker;
     currentStriker = currentNonStriker;
     currentNonStriker = temp;
     lsRefreshStats();
+    persistContext();
 }
 
 function updateScoreboardStrip(runs, wickets, over, ball) {
@@ -944,7 +1009,7 @@ function updateScoreboardStrip(runs, wickets, over, ball) {
 async function lsRefreshStats() {
     if (!beMatchId) return;
     try {
-        const res = await fetch(`${API}/api/stats/scorecard/${beMatchId}`);
+        const res = await fetch(`${API}/api/stats/scorecard/${beMatchId}?_t=${Date.now()}`);
         if (!res.ok) return;
         const data = await res.json();
         
@@ -960,12 +1025,12 @@ async function lsRefreshStats() {
         const bName = bePlayers.find(p => p.playerID == currentBowler)?.playerName || '—';
 
         document.getElementById('ls-striker-name').textContent = sName;
-        document.getElementById('ls-striker-runs').textContent = pStriker ? pStriker.runsScored : 0;
-        document.getElementById('ls-striker-balls').textContent = `(${pStriker ? pStriker.ballsFaced : 0})`;
+        document.getElementById('ls-striker-runs').textContent = pStriker ? pStriker.runs : 0;
+        document.getElementById('ls-striker-balls').textContent = `(${pStriker ? pStriker.balls : 0})`;
 
         document.getElementById('ls-nonstriker-name').textContent = nsName;
-        document.getElementById('ls-nonstriker-runs').textContent = pNonStriker ? pNonStriker.runsScored : 0;
-        document.getElementById('ls-nonstriker-balls').textContent = `(${pNonStriker ? pNonStriker.ballsFaced : 0})`;
+        document.getElementById('ls-nonstriker-runs').textContent = pNonStriker ? pNonStriker.runs : 0;
+        document.getElementById('ls-nonstriker-balls').textContent = `(${pNonStriker ? pNonStriker.balls : 0})`;
 
         document.getElementById('ls-bowler-name').textContent = bName;
         if (pBowler) {
@@ -989,25 +1054,48 @@ async function updateTimeline() {
     try {
         const res = await authFetch(`${API}/api/balls/${beMatchId}?innings=${beInnings}`);
         const balls = await res.json();
-        
+
         const timeline = document.getElementById('ls-this-over-bubbles');
         if(!timeline) return;
-        
-        // Filter balls by current over (lsCurrentOver)
-        // Wait, maybe just the last 6-8 balls is fine.
-        const recent = balls.slice(-8);
-        timeline.innerHTML = recent.length ? recent.map(b => {
-            let cls = 'dot', label = '0';
-            if (b.wicketFallen)                { cls = 'wicket'; label = 'W'; }
-            else if (b.extraType === 'Wide')   { cls = 'wide';   label = (b.runsScored > 0 ? (b.runsScored+1) : '') + 'Wd'; }
-            else if (b.extraType === 'NoBall') { cls = 'noball'; label = (b.runsScored > 0 ? (b.runsScored+1) : '') + 'Nb'; }
-            else if (b.extraType === 'Bye')    { cls = 'dot';    label = (b.extras) + 'B'; }
-            else if (b.extraType === 'LegBye') { cls = 'dot';    label = (b.extras) + 'Lb'; }
-            else if (b.runsScored === 6)       { cls = 'six';    label = '6'; }
-            else if (b.runsScored === 4)       { cls = 'four';   label = '4'; }
-            else if (b.runsScored > 0)         { cls = 'run';    label = String(b.runsScored); }
-            return `<div style="min-width: 30px; height: 30px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-size: 0.75rem; font-weight:700; background: var(--bg-card);" class="ball-chip ${cls}" title="Over ${b.overNumber}.${b.ballNumber}" onclick="confirmDeleteBall(${b.ballID})">${label}</div>`;
-        }).join('') : '<span style="color:var(--text-muted); font-size:0.8rem;">No balls in this innings yet.</span>';
+
+        // Show only the balls bowled so far in the current over, as a row of
+        // 6 fixed circular indicators (filled in sequence, rest left empty).
+        const overBalls = balls.filter(b => b.overNumber === lsCurrentOver);
+
+        let html = '';
+        for (let i = 0; i < 6; i++) {
+            const b = overBalls[i];
+            if (!b) {
+                html += `<div class="be-over-dot be-over-empty"></div>`;
+                continue;
+            }
+            let cls = 'be-over-dot', label = '0';
+            if (b.wicketFallen) {
+                cls += ' wicket'; label = 'W';
+            } else if (b.extraType === 'Wide') {
+                cls += ' wide';
+                const total = (b.runsScored || 0) + (b.extras || 0);
+                label = total + 'WD';
+            } else if (b.extraType === 'NoBall') {
+                cls += ' noball';
+                const total = (b.runsScored || 0) + (b.extras || 0);
+                label = total + 'NB';
+            } else if (b.extraType === 'Bye') {
+                cls += ' extra'; label = (b.extras || 0) + 'BY';
+            } else if (b.extraType === 'LegBye') {
+                cls += ' extra'; label = (b.extras || 0) + 'LB';
+            } else if (b.extraType === 'Penalty') {
+                cls += ' extra'; label = '5PEN';
+            } else if (b.runsScored === 6) {
+                cls += ' six'; label = '6';
+            } else if (b.runsScored === 4) {
+                cls += ' four'; label = '4';
+            } else if (b.runsScored > 0) {
+                cls += ' run'; label = String(b.runsScored);
+            }
+            html += `<div class="${cls}" title="Over ${b.overNumber}.${b.ballNumber}" onclick="confirmDeleteBall(${b.ballID})">${label}</div>`;
+        }
+        timeline.innerHTML = html;
     } catch {}
 }
 
@@ -1071,7 +1159,17 @@ function lsOpenWicketModal() {
     const fielderSelect = document.getElementById('ls-wicket-fielder');
     if (fielderSelect) fielderSelect.innerHTML = fieldOpts;
 
-    document.getElementById('ls-wicket-who').value = currentStriker;
+    const strikerPlayer = bePlayers.find(p => p.playerID === currentStriker);
+    const nonStrikerPlayer = bePlayers.find(p => p.playerID === currentNonStriker);
+    let whoOpts = '';
+    if (strikerPlayer) whoOpts += `<option value="${strikerPlayer.playerID}">${strikerPlayer.playerName} (Striker)</option>`;
+    if (nonStrikerPlayer) whoOpts += `<option value="${nonStrikerPlayer.playerID}">${nonStrikerPlayer.playerName} (Non-Striker)</option>`;
+    const whoSelect = document.getElementById('ls-wicket-who');
+    if (whoSelect) {
+        whoSelect.innerHTML = whoOpts || '<option value="">No batters on crease</option>';
+        whoSelect.value = currentStriker;
+    }
+
     document.getElementById('lsWicketModal').style.display = 'flex';
     lsOnWicketTypeChange();
 }
@@ -1112,10 +1210,11 @@ async function lsSubmitBall(isWicket) {
         overNumber:        lsCurrentOver,
         ballNumber:        lsCurrentBall,
         batsmanID:         currentStriker,
+        nonStrikerID:      currentNonStriker,
         bowlerID:          currentBowler,
         runsScored:        beRuns,
         extras:            totalExtras,
-        extraType:         lsExtraType || beDelType === 'Wide' ? 'Wide' : beDelType === 'NoBall' ? 'NoBall' : null,
+        extraType:         lsExtraType || (beDelType === 'Wide' ? 'Wide' : beDelType === 'NoBall' ? 'NoBall' : null),
         wicketFallen:      isWicket ? 1 : 0,
         dismissedPlayerID: dismissed,
         wicketType:        dismissal,
@@ -1123,6 +1222,16 @@ async function lsSubmitBall(isWicket) {
     };
 
     try {
+        // Immediate local update for wicket: add dismissed player to tracking
+        // so the context modal has correct data even before state fetch returns
+        if (isWicket) {
+            const dismissedPlayer = document.getElementById('ls-wicket-who')?.value 
+                || document.getElementById('be-dismissed')?.value;
+            if (dismissedPlayer && !beDismissedIDs.includes(dismissedPlayer)) {
+                beDismissedIDs.push(dismissedPlayer);
+            }
+        }
+
         const res = await authFetch(`${API}/api/balls`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1152,6 +1261,12 @@ async function lsSubmitBall(isWicket) {
         
         lsCurrentOver = stateData.nextOver;
         lsCurrentBall = stateData.nextBall;
+        beLastOverBowlerID = stateData.lastOverBowlerID || null;
+        beBowlerOvers = stateData.bowlerOvers || {};
+        // Merge server dismissed list with any locally tracked dismissals
+        // (e.g., the wicket we just submitted before server state refresh)
+        const serverDismissed = stateData.dismissedPlayerIDs || [];
+        beDismissedIDs = [...new Set([...serverDismissed, ...beDismissedIDs])];
         updateScoreboardStrip(stateData.totalRuns, stateData.wickets, lsCurrentOver, lsCurrentBall);
 
         overEnded = (lsCurrentOver > nextOver || (beDelType !== 'Wide' && beDelType !== 'NoBall' && beDelType !== 'Penalty' && lsCurrentBall === 1));
@@ -1169,6 +1284,7 @@ async function lsSubmitBall(isWicket) {
         }
 
         if (isWicket) {
+            pendingNewBatter = true;
             openContextModal('wicket', overEnded);
         } else if (overEnded) {
             openContextModal('new_over');
@@ -1177,6 +1293,14 @@ async function lsSubmitBall(isWicket) {
         }
 
         updateTimeline();
+
+        // Auto-refresh ball log if visible
+        if (document.getElementById('ball-log-body') && beMatchId) {
+            loadBallLog(beMatchId, beInnings);
+        }
+
+        // Broadcast data change to other pages
+        if (window.DataSync) DataSync.ballRecorded(beMatchId, beInnings);
 
     } catch {
         showToast('Server error.', 'error');
@@ -1221,9 +1345,21 @@ function renderBallLogViz(balls) {
             if (b.wicketFallen)          { cls = 'wicket'; label = 'W'; }
             else if (b.runsScored === 6) { cls = 'six';    label = '6'; }
             else if (b.runsScored === 4) { cls = 'four';   label = '4'; }
-            else if (b.extraType === 'Wide')   { cls = 'wide';   label = 'Wd'; }
-            else if (b.extraType === 'NoBall') { cls = 'noball'; label = 'Nb'; }
-            else if (b.runsScored > 0)         { cls = 'run';    label = String(b.runsScored); }
+            else if (b.extraType === 'Wide') {
+                cls = 'wide';
+                const total = (b.runsScored || 0) + (b.extras || 0);
+                label = total + 'WD';
+            } else if (b.extraType === 'NoBall') {
+                cls = 'noball';
+                const total = (b.runsScored || 0) + (b.extras || 0);
+                label = total + 'NB';
+            } else if (b.extraType === 'Bye') {
+                cls = 'extra'; label = (b.extras || 0) + 'BY';
+            } else if (b.extraType === 'LegBye') {
+                cls = 'extra'; label = (b.extras || 0) + 'LB';
+            } else if (b.extraType === 'Penalty') {
+                cls = 'extra'; label = '5PEN';
+            } else if (b.runsScored > 0)         { cls = 'run';    label = String(b.runsScored); }
             return `<div class="ball-chip ${cls}" title="Over ${b.overNumber}.${b.ballNumber}: ${b.batsmanName} vs ${b.bowlerName}">${label}</div>`;
         }).join('');
         return `<div class="over-group"><div class="over-group-label">Over ${overNum}</div><div class="over-balls">${chips}</div></div>`;
@@ -1241,7 +1377,25 @@ function renderBallLogTable(balls) {
             ? `<span class="badge" style="background:rgba(59,130,246,0.25); color:#93c5fd;">WIDE</span>`
             : b.extraType === 'NoBall'
             ? `<span class="badge" style="background:rgba(168,85,247,0.25); color:#e9d5ff;">NO BALL</span>`
+            : b.extraType === 'Bye'
+            ? `<span class="badge" style="background:rgba(34,197,94,0.25); color:#86efac;">BYE</span>`
+            : b.extraType === 'LegBye'
+            ? `<span class="badge" style="background:rgba(234,179,8,0.25); color:#fde047;">LEG BYE</span>`
+            : b.extraType === 'Penalty'
+            ? `<span class="badge" style="background:rgba(239,68,68,0.25); color:#fca5a5;">PENALTY</span>`
             : `<span class="badge badge-t20">Legal</span>`;
+
+        const extraText = b.extraType === 'Wide'
+            ? ((b.runsScored || 0) + (b.extras || 0)) + 'WD'
+            : b.extraType === 'NoBall'
+            ? ((b.runsScored || 0) + (b.extras || 0)) + 'NB'
+            : b.extraType === 'Bye'
+            ? (b.extras || 0) + 'BY'
+            : b.extraType === 'LegBye'
+            ? (b.extras || 0) + 'LB'
+            : b.extraType === 'Penalty'
+            ? '5PEN'
+            : (b.extras || 0);
 
         const runsBadge = b.runsScored === 6
             ? `<strong style="color:var(--red-ball-light);">6 💥</strong>`
@@ -1259,7 +1413,7 @@ function renderBallLogTable(balls) {
             <td style="color:var(--text-muted); font-size:0.82rem;">${b.bowlerName}</td>
             <td>${delBadge}</td>
             <td>${runsBadge}</td>
-            <td style="color:var(--text-muted);">${b.extras || 0}</td>
+            <td style="color:var(--text-muted);">${extraText}</td>
             <td>${wicket}</td>
             <td>
                 <button class="btn-view" style="font-size:0.75rem; padding:0.3rem 0.6rem; margin-right:0.3rem;" onclick="editBall(${b.ballID})">✏️</button>

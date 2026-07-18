@@ -32,6 +32,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (avatarEl) avatarEl.textContent = (user.fullname || 'A')[0].toUpperCase();
 
     loadRankings();
+
+    // Auto-refresh when data changes on other pages
+    if (window.DataSync) {
+        DataSync.on('ball-recorded', () => loadRankings());
+        DataSync.on('match-completed', () => loadRankings());
+        DataSync.on('data-changed', () => loadRankings());
+    }
 });
 
 async function loadRankings() {
@@ -79,7 +86,7 @@ function renderTeamRankings(teams) {
 function renderPlayerRankings(players) {
     const tb = document.getElementById('player-rankings');
     if (!players.length) {
-        tb.innerHTML = `<tr><td colspan="4" class="empty-state">No player data available.</td></tr>`;
+        tb.innerHTML = `<tr><td colspan="5" class="empty-state">No player data available.</td></tr>`;
         return;
     }
     
@@ -94,6 +101,7 @@ function renderPlayerRankings(players) {
             <td><strong>${p.playerName}</strong></td>
             <td>${fmtRole(p.playerRole)}</td>
             <td><strong style="color:var(--primary-light)">${p.totalRuns || 0}</strong></td>
+            <td><strong style="color:var(--red-ball-light)">${p.totalWickets || 0}</strong></td>
         </tr>`;
     }).join('');
 }

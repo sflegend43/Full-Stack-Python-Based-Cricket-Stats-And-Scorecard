@@ -3,12 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="view-transition" content="same-origin">
     <title>🏏 CricketStats Pro | Tournaments</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="cricket_anim.css">
     <script>if (!localStorage.getItem('cricketUser')) window.location.href = 'login.html';</script>
+    <script src="transitions.js"></script>
 </head>
 <body>
     <div class="stadium-bg-overlay"></div>
@@ -17,28 +19,36 @@
     <div class="container">
         <!-- NAVBAR -->
         <nav>
-            <div class="logo">
-                <span class="logo-icon">🏏</span>
-                <div class="logo-text">
-                    <span class="logo-name">CRICKET<span class="logo-pro">STATS</span></span>
-                    <div class="logo-sub">ANALYTICS PLATFORM</div>
+            <div class="nav-top">
+                <div class="nav-left">
+                    <span class="logo-icon">🏏</span>
+                    <div>
+                        <span class="logo-name">CRICKET<span class="logo-pro">STATS</span><span class="logo-sub"> PRO</span></span>
+                    </div>
+                </div>
+                <div class="nav-center">
+                    <div class="ai-pill">
+                        <span class="ai-badge">AI INSIGHT</span>
+                        <span class="ai-text" id="ai-insight-text">Loading predictions...</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-user">
+                        <div class="user-avatar" id="user-avatar">A</div>
+                        <span class="nav-welcome">Welcome, <b id="user-name-display">Admin</b></span>
+                    </div>
+                    <a href="#" onclick="logout()" class="logout-btn">Sign Out ↗</a>
                 </div>
             </div>
-            <ul class="nav-links">
-                <li><a href="index.html"       class="nav-link">📊 Dashboard</a></li>
-                <li><a href="tournaments.html"       class="nav-link active">🏆 Tournaments</a></li>
-                <li><a href="matches.html"       class="nav-link">📋 Matches</a></li>
-                <li><a href="players.html"       class="nav-link">🏏 Players</a></li>
-                <li><a href="teams.html"       class="nav-link">🛡️ Teams</a></li>
-                <li><a href="rankings.html"       class="nav-link">📈 Rankings</a></li>
-                <li><a href="stats.html"       class="nav-link">🤖 AI Stats</a></li>
-            </ul>
-            <div class="nav-right">
-                <div class="nav-user">
-                    <div class="user-avatar" id="user-avatar">A</div>
-                    <span class="nav-welcome">Welcome, <b id="user-name-display">Admin</b></span>
-                </div>
-                <a href="#" onclick="logout()" class="logout-btn">Sign Out ↗</a>
+            <div class="nav-bottom">
+                <ul class="nav-links">
+                    <li><a href="index.html" class="nav-link">📊 Dashboard</a></li>
+                    <li><a href="tournaments.html" class="nav-link active">🏆 Tournament</a></li>
+                    <li><a href="matches.html" class="nav-link">📋 Matches</a></li>
+                    <li><a href="players.html" class="nav-link">🏏 Players</a></li>
+                    <li><a href="teams.html" class="nav-link">🛡️ Teams</a></li>
+                    <li><a href="stats.html" class="nav-link">🤖 AI Stats</a></li>
+                </ul>
             </div>
         </nav>
 
@@ -169,7 +179,18 @@
             </div>
         </div>
     </div>
+    <!-- STANDINGS MODAL -->
+    <div id="standingsModal" class="modal-overlay" style="display:none; z-index:1000;">
+        <div class="modal-card glass-card" style="max-width:850px; width:95%; max-height:90vh; display:flex; flex-direction:column;">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 id="standingsTitle">Tournament Standings</h3>
+                <button onclick="document.getElementById('standingsModal').style.display='none'" style="background:transparent; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+            <div id="standingsContent" style="overflow-y:auto; padding-top:1rem;"></div>
+        </div>
+    </div>
 
     <script src="tournaments.js"></script>
+    <button id="scroll-top-btn" class="scroll-top-btn" title="Back to top">↑</button>
 </body>
 </html>

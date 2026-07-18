@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="view-transition" content="same-origin">
     <title>🏏 CricketStats Pro | Matches</title>
     <meta name="description" content="Browse match scorecards, ball-by-ball data, and playing XIs in CricketStats Pro.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -10,6 +11,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="cricket_anim.css">
     <script>if (!localStorage.getItem('cricketUser')) window.location.href = 'login.html';</script>
+    <script src="transitions.js"></script>
 </head>
 <body>
     <!-- Stadium background (low opacity) -->
@@ -19,28 +21,36 @@
     <div class="container">
         <!-- NAVBAR -->
         <nav>
-            <div class="logo">
-                <span class="logo-icon">🏏</span>
-                <div class="logo-text">
-                    <span class="logo-name">CRICKET<span class="logo-pro">STATS</span></span>
-                    <div class="logo-sub">ANALYTICS PLATFORM</div>
+            <div class="nav-top">
+                <div class="nav-left">
+                    <span class="logo-icon">🏏</span>
+                    <div>
+                        <span class="logo-name">CRICKET<span class="logo-pro">STATS</span><span class="logo-sub"> PRO</span></span>
+                    </div>
+                </div>
+                <div class="nav-center">
+                    <div class="ai-pill">
+                        <span class="ai-badge">AI INSIGHT</span>
+                        <span class="ai-text" id="ai-insight-text">Loading predictions...</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-user">
+                        <div class="user-avatar" id="user-avatar">A</div>
+                        <span class="nav-welcome">Welcome, <b id="user-name-display">Admin</b></span>
+                    </div>
+                    <a href="#" onclick="logout()" class="logout-btn">Sign Out ↗</a>
                 </div>
             </div>
-            <ul class="nav-links">
-                <li><a href="index.html"       class="nav-link">📊 Dashboard</a></li>
-                <li><a href="tournaments.html"       class="nav-link">🏆 Tournaments</a></li>
-                <li><a href="matches.html"       class="nav-link active">📋 Matches</a></li>
-                <li><a href="players.html"       class="nav-link">🏏 Players</a></li>
-                <li><a href="teams.html"       class="nav-link">🛡️ Teams</a></li>
-                <li><a href="rankings.html"       class="nav-link">📈 Rankings</a></li>
-                <li><a href="stats.html"       class="nav-link">🤖 AI Stats</a></li>
-            </ul>
-            <div class="nav-right">
-                <div class="nav-user">
-                    <div class="user-avatar" id="user-avatar">A</div>
-                    <span class="nav-welcome">Welcome, <b id="user-name-display">Admin</b></span>
-                </div>
-                <a href="#" onclick="logout()" class="logout-btn">Sign Out ↗</a>
+            <div class="nav-bottom">
+                <ul class="nav-links">
+                    <li><a href="index.html" class="nav-link">📊 Dashboard</a></li>
+                    <li><a href="tournaments.html" class="nav-link">🏆 Tournament</a></li>
+                    <li><a href="matches.html" class="nav-link active">📋 Matches</a></li>
+                    <li><a href="players.html" class="nav-link">🏏 Players</a></li>
+                    <li><a href="teams.html" class="nav-link">🛡️ Teams</a></li>
+                    <li><a href="stats.html" class="nav-link">🤖 AI Stats</a></li>
+                </ul>
             </div>
         </nav>
 
@@ -134,7 +144,7 @@
                 <h3>🎯 1st Innings — Bowling</h3>
                 <div class="table-scroll">
                     <table>
-                        <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Extras</th><th>Economy</th></tr></thead>
+                        <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Maidens</th><th>Economy</th></tr></thead>
                         <tbody id="inn1-bowl-body"></tbody>
                     </table>
                 </div>
@@ -145,7 +155,7 @@
                 <h3>🎯 2nd Innings — Bowling</h3>
                 <div class="table-scroll">
                     <table>
-                        <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Extras</th><th>Economy</th></tr></thead>
+                        <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Maidens</th><th>Economy</th></tr></thead>
                         <tbody id="inn2-bowl-body"></tbody>
                     </table>
                 </div>
@@ -233,135 +243,122 @@
         </div>
     </div>
 
-    <!-- ═══ LIVE SCORING VIEW (full-screen, no-scroll vertical layout) ═══ -->
-    <div id="live-scoring-view" style="display:none; position:fixed; inset:0; z-index:1400; max-width:480px; margin:0 auto; width:100%; height:100vh; flex-direction:column; background: var(--bg-card); border-radius:0;">
+    <!-- ═══ LIVE SCORING VIEW (standard page layout, below the top nav) ═══ -->
+    <div id="live-scoring-view" style="display:none;">
 
-        <!-- HEADER -->
-        <div style="flex:0 0 auto; display:flex; justify-content:space-between; align-items:center; padding: 0.6rem 0.9rem; background: rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <div style="display:flex; align-items:center; gap: 0.5rem;">
-                <button onclick="closeLiveScoring()" style="background:transparent; border:none; color:var(--text-muted); font-size:1.3rem; cursor:pointer; padding: 0 0.4rem 0 0;">←</button>
-                <span id="ls-teams-title" style="font-weight:700; font-size: 0.95rem;">Match</span>
-            </div>
-            <div style="background: rgba(22, 163, 74, 0.2); color: var(--neon-green); padding: 0.15rem 0.55rem; border-radius: 12px; font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; gap: 0.3rem;">
-                <span class="pulsing-dot" style="width:6px; height:6px; background:var(--neon-green); border-radius:50%; display:inline-block; animation: pulse 1.5s infinite;"></span> LIVE
-            </div>
-        </div>
-
-        <!-- MAIN CONTENT (fits viewport, no vertical scroll needed) -->
-        <div style="flex:1 1 auto; display:flex; flex-direction:column; justify-content:space-evenly; padding: 0.5rem 0.9rem; min-height:0; overflow:hidden; gap:0.35rem;">
-
-            <!-- SCORECARD BLOCK -->
-            <div class="glass-card" style="text-align:center; padding: 0.6rem 0.8rem; background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.2) 100%);">
-                <div style="display:flex; justify-content:center; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.2rem;">
-                    <span id="ls-batting-team" style="display:inline-block; background:rgba(255,255,255,0.05); padding:0.15rem 0.6rem; border-radius:10px; font-size:0.68rem; font-weight:700; color:var(--gold);">BAT TEAM</span>
-                    <span id="ls-bowling-team" style="display:inline-block; background:rgba(255,255,255,0.05); padding:0.15rem 0.6rem; border-radius:10px; font-size:0.68rem; font-weight:700; color:var(--text-muted);">BOWL TEAM</span>
-                </div>
-                <div style="display:flex; justify-content:center; align-items:baseline; gap:0.5rem; margin-bottom:0.15rem;">
-                    <span id="ls-score" style="font-family:'Orbitron',sans-serif; font-size: 2.6rem; font-weight:900; line-height: 1;">0/0</span>
-                    <span id="ls-overs" style="font-family:'Orbitron',sans-serif; font-size: 1.05rem; color:var(--text-muted); font-weight:600;">(0.0)</span>
-                </div>
-                <div style="font-size: 0.78rem; color: var(--text-muted); font-weight:500;">
-                    CRR: <span id="ls-crr" style="color:var(--gold);">0.00</span>
-                </div>
-            </div>
-
-            <!-- BATTERS BLOCK -->
-            <div style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.5rem; position: relative;">
-                <!-- Swap Button -->
-                <button onclick="manualSwapStriker()" title="Swap striker/non-striker" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--gold); border-radius: 50%; width: 30px; height: 30px; display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 0.85rem; z-index: 10;">🔄</button>
-
-                <div style="display:flex; justify-content:space-between; align-items:center; padding: 0.25rem 0; padding-right: 36px;">
-                    <div style="display:flex; align-items:center; gap: 0.5rem;">
-                        <div id="ls-striker-ind" style="width:7px; height:7px; border-radius:50%; background:var(--gold); opacity:1;"></div>
-                        <div id="ls-striker-name" style="font-weight:700; font-size: 0.9rem;">—</div>
-                    </div>
-                    <div style="text-align:right; min-width: 55px;">
-                        <span id="ls-striker-runs" style="font-weight:800; font-size: 1rem; color:var(--gold);">0</span>
-                        <span id="ls-striker-balls" style="font-size: 0.78rem; color:var(--text-muted);">(0)</span>
-                    </div>
-                </div>
-
-                <div style="display:flex; justify-content:space-between; align-items:center; padding: 0.25rem 0; padding-right: 36px;">
-                    <div style="display:flex; align-items:center; gap: 0.5rem;">
-                        <div id="ls-nonstriker-ind" style="width:7px; height:7px; border-radius:50%; background:var(--gold); opacity:0;"></div>
-                        <div id="ls-nonstriker-name" style="font-weight:600; font-size: 0.85rem; color:var(--text-muted);">—</div>
-                    </div>
-                    <div style="text-align:right; min-width: 55px;">
-                        <span id="ls-nonstriker-runs" style="font-weight:700; font-size: 0.9rem; color:var(--text-muted);">0</span>
-                        <span id="ls-nonstriker-balls" style="font-size: 0.78rem; color:var(--text-muted);">(0)</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- BOWLER BLOCK -->
-            <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                <div style="flex:1;">
-                    <div id="ls-bowler-name" style="font-weight:700; font-size: 0.9rem;">—</div>
-                    <div style="font-size: 0.65rem; color:var(--primary); font-weight:600; letter-spacing:0.5px; cursor:pointer;" onclick="openContextModal('end_over')">BOWLING • TAP TO CHANGE</div>
-                </div>
-                <div style="display:flex; gap: 0.7rem; text-align:center;">
-                    <div>
-                        <div style="font-size:0.6rem; color:var(--text-muted); font-weight:700;">OV</div>
-                        <div id="ls-bowler-o" style="font-weight:700; font-family:'Orbitron',sans-serif; font-size:0.9rem;">0.0</div>
-                    </div>
-                    <div>
-                        <div style="font-size:0.6rem; color:var(--text-muted); font-weight:700;">M</div>
-                        <div id="ls-bowler-m" style="font-weight:700; font-family:'Orbitron',sans-serif; font-size:0.9rem;">0</div>
-                    </div>
-                    <div>
-                        <div style="font-size:0.6rem; color:var(--text-muted); font-weight:700;">R</div>
-                        <div id="ls-bowler-r" style="font-weight:700; font-family:'Orbitron',sans-serif; font-size:0.9rem;">0</div>
-                    </div>
-                    <div>
-                        <div style="font-size:0.6rem; color:var(--text-muted); font-weight:700;">W</div>
-                        <div id="ls-bowler-w" style="font-weight:700; font-family:'Orbitron',sans-serif; color:var(--gold); font-size:0.9rem;">0</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- THIS OVER TIMELINE -->
-            <div>
-                <div style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.3rem;" id="ls-this-over-label">This Over</div>
-                <div id="ls-this-over-bubbles" style="display:flex; gap: 0.35rem; overflow-x: auto; min-height: 30px;">
-                    <!-- Bubbles injected by JS -->
-                </div>
-            </div>
-
-        </div> <!-- End Main Content -->
-
-        <!-- NUMPAD AREA (pinned at bottom, always visible) -->
-        <div style="flex:0 0 auto; background: var(--bg-surface); border-top: 1px solid rgba(255,255,255,0.08); padding: 0.8rem 0.7rem; padding-bottom: max(0.8rem, env(safe-area-inset-bottom)); box-shadow: 0 -4px 20px rgba(0,0,0,0.5);">
-            <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem;">
-                
-                <!-- ROW 1 -->
-                <button class="numpad-btn" onclick="lsRecordRun(0)">0</button>
-                <button class="numpad-btn" onclick="lsRecordRun(1)">1</button>
-                <button class="numpad-btn" onclick="lsRecordRun(2)">2</button>
-                <button class="numpad-btn" onclick="lsRecordRun(3)">3</button>
-                
-                <!-- ROW 2 -->
-                <button class="numpad-btn flame-effect" style="color:var(--gold); font-weight:900;" onclick="lsRecordRun(4)">
-                    4<br><span style="font-size:0.6rem; font-weight:700;">FOUR</span>
-                </button>
-                <button class="numpad-btn flame-effect" style="color:var(--neon-green); font-weight:900;" onclick="lsRecordRun(6)">
-                    6<br><span style="font-size:0.6rem; font-weight:700;">SIX</span>
-                </button>
-                <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('Wide')">WD</button>
-                <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('NoBall')">NB</button>
-
-                <!-- ROW 3 -->
-                <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('Bye')">BYE</button>
-                <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('LegBye')">LB</button>
-                <button class="numpad-btn numpad-btn-action flame-effect" style="grid-column: span 2; color:#fff; font-size:1.1rem; border: none; font-weight:900;" onclick="lsOpenWicketModal()">🚨 OUT</button>
-
-                <!-- ROW 4 -->
-                <button class="numpad-btn numpad-btn-secondary" style="grid-column: span 2; color:var(--gold);" onclick="lsOpenExtraModal('Penalty')">5 PENALTY</button>
-                <button class="numpad-btn numpad-btn-secondary" style="grid-column: span 1; font-size:1.3rem;" onclick="lsOpenRetireModal()" title="Retire Batter">🚑</button>
-                <button class="numpad-btn numpad-btn-action" style="grid-column: span 1; color:var(--primary-light);" onclick="undoLastBall()">↩ UNDO</button>
-
+        <!-- TOOLBAR -->
+        <div class="be-toolbar">
+            <button class="filter-btn" onclick="closeLiveScoring()">← Back to Scorecard</button>
+            <div class="be-toolbar-right">
+                <span id="ls-teams-title" class="be-match-title">Match</span>
+                <span class="be-live-badge">
+                    <span class="pulsing-dot"></span> LIVE
+                </span>
             </div>
         </div>
 
+        <!-- TWO-COLUMN GRID -->
+        <div class="be-grid">
+
+            <!-- LEFT COLUMN: SCORECARD -->
+            <div class="be-left-col">
+
+                <!-- Match header / main score -->
+                <div class="be-score-head glass-card">
+                    <div class="be-team-badges">
+                        <span id="ls-batting-team" class="be-team-badge batting">BAT TEAM</span>
+                        <span id="ls-bowling-team" class="be-team-badge bowling">BOWL TEAM</span>
+                    </div>
+                    <div class="be-score-row">
+                        <span id="ls-score" class="be-main-score">0/0</span>
+                        <span id="ls-overs" class="be-main-overs">(0.0)</span>
+                    </div>
+                    <div class="be-crr">CRR: <span id="ls-crr">0.00</span></div>
+                </div>
+
+                <!-- Current over timeline (6 circular indicators) -->
+                <div class="be-over glass-card">
+                    <div id="ls-this-over-label" class="be-over-label">This Over</div>
+                    <div id="ls-this-over-bubbles" class="be-over-dots"></div>
+                </div>
+
+                <!-- Batters (static display, no selection) -->
+                <div class="be-batters glass-card">
+                    <div class="be-batter-row">
+                        <button onclick="manualSwapStriker()" title="Swap striker / non-striker" class="be-swap-btn">🔄</button>
+                        <div class="be-batter-left">
+                            <div id="ls-striker-ind" class="be-batter-dot"></div>
+                            <div id="ls-striker-name" class="be-batter-name">—</div>
+                        </div>
+                        <div class="be-batter-runs">
+                            <span id="ls-striker-runs">0</span><span id="ls-striker-balls" class="be-batter-balls">(0)</span>
+                        </div>
+                    </div>
+                    <div class="be-batter-divider"></div>
+                    <div class="be-batter-row">
+                        <div class="be-batter-left">
+                            <div id="ls-nonstriker-ind" class="be-batter-dot be-batter-dot-off"></div>
+                            <div id="ls-nonstriker-name" class="be-batter-name be-batter-name-off">—</div>
+                        </div>
+                        <div class="be-batter-runs">
+                            <span id="ls-nonstriker-runs">0</span><span id="ls-nonstriker-balls" class="be-batter-balls">(0)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bowler -->
+                <div class="be-bowler glass-card">
+                    <div class="be-bowler-info">
+                        <div id="ls-bowler-name" class="be-bowler-name">—</div>
+                        <div class="be-bowler-sub" onclick="openContextModal('end_over')">BOWLING • TAP TO CHANGE</div>
+                    </div>
+                    <div class="be-bowler-stats">
+                        <div class="be-stat"><div class="be-stat-label">OV</div><div id="ls-bowler-o" class="be-stat-val">0.0</div></div>
+                        <div class="be-stat"><div class="be-stat-label">M</div><div id="ls-bowler-m" class="be-stat-val">0</div></div>
+                        <div class="be-stat"><div class="be-stat-label">R</div><div id="ls-bowler-r" class="be-stat-val">0</div></div>
+                        <div class="be-stat"><div class="be-stat-label">W</div><div id="ls-bowler-w" class="be-stat-val be-stat-w">0</div></div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN: KEYPAD -->
+            <div class="be-right-col">
+                <div class="be-numpad glass-card">
+
+                    <div class="be-numpad-group">
+                        <div class="be-group-label">Runs</div>
+                        <div class="be-grid-runs">
+                            <button class="numpad-btn" onclick="lsRecordRun(0)">0</button>
+                            <button class="numpad-btn" onclick="lsRecordRun(1)">1</button>
+                            <button class="numpad-btn" onclick="lsRecordRun(2)">2</button>
+                            <button class="numpad-btn" onclick="lsRecordRun(3)">3</button>
+                            <button class="numpad-btn numpad-btn-four" onclick="lsRecordRun(4)">4<span class="be-btn-sub">FOUR</span></button>
+                            <button class="numpad-btn numpad-btn-six" onclick="lsRecordRun(6)">6<span class="be-btn-sub">SIX</span></button>
+                        </div>
+                    </div>
+
+                    <div class="be-numpad-group">
+                        <div class="be-group-label">Extras</div>
+                        <div class="be-grid-extras">
+                            <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('Wide')">WD</button>
+                            <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('NoBall')">NB</button>
+                            <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('Bye')">BYE</button>
+                            <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('LegBye')">LB</button>
+                            <button class="numpad-btn numpad-btn-secondary numpad-btn-pen" onclick="lsOpenExtraModal('Penalty')">5 PEN</button>
+                            <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenRetireModal()" title="Retire Batter">🚑</button>
+                        </div>
+                    </div>
+
+                    <div class="be-numpad-actions">
+                        <button class="numpad-btn numpad-btn-out" onclick="lsOpenWicketModal()">🚨 OUT</button>
+                        <button class="numpad-btn numpad-btn-undo" onclick="undoLastBall()">↩ UNDO</button>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
     </div>
 
     <!-- ═══ LIVE SCORING SUB-MODALS ═══ -->
@@ -376,6 +373,8 @@
                 <button class="run-btn" data-runs="2" onclick="lsSetExtraRuns(2, this)">+2</button>
                 <button class="run-btn" data-runs="3" onclick="lsSetExtraRuns(3, this)">+3</button>
                 <button class="run-btn" data-runs="4" onclick="lsSetExtraRuns(4, this)">+4</button>
+                <button class="run-btn" data-runs="5" onclick="lsSetExtraRuns(5, this)">+5</button>
+                <button class="run-btn" data-runs="6" onclick="lsSetExtraRuns(6, this)">+6</button>
             </div>
             <div style="display:flex; gap:0.5rem;">
                 <button class="btn-cancel" style="flex:1;" onclick="document.getElementById('lsExtraModal').style.display='none'">Cancel</button>
@@ -640,5 +639,6 @@
 
     <script src="matches.js"></script>
     <script src="parallax.js"></script>
+    <button id="scroll-top-btn" class="scroll-top-btn" title="Back to top">↑</button>
 </body>
 </html>

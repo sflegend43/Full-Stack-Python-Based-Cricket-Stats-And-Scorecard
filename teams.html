@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="view-transition" content="same-origin">
     <title>🏏 CricketStats Pro | Teams</title>
     <meta name="description" content="Team rankings, squads, and stats in CricketStats Pro.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -10,6 +11,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="cricket_anim.css">
     <script>if (!localStorage.getItem('cricketUser')) window.location.href = 'login.html';</script>
+    <script src="transitions.js"></script>
 </head>
 <body>
     <!-- Stadium background (low opacity) -->
@@ -19,28 +21,36 @@
     <div class="container">
         <!-- NAVBAR -->
         <nav>
-            <div class="logo">
-                <span class="logo-icon">🏏</span>
-                <div class="logo-text">
-                    <span class="logo-name">CRICKET<span class="logo-pro">STATS</span></span>
-                    <div class="logo-sub">ANALYTICS PLATFORM</div>
+            <div class="nav-top">
+                <div class="nav-left">
+                    <span class="logo-icon">🏏</span>
+                    <div>
+                        <span class="logo-name">CRICKET<span class="logo-pro">STATS</span><span class="logo-sub"> PRO</span></span>
+                    </div>
+                </div>
+                <div class="nav-center">
+                    <div class="ai-pill">
+                        <span class="ai-badge">AI INSIGHT</span>
+                        <span class="ai-text" id="ai-insight-text">Loading predictions...</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-user">
+                        <div class="user-avatar" id="user-avatar">A</div>
+                        <span class="nav-welcome">Welcome, <b id="user-name-display">Admin</b></span>
+                    </div>
+                    <a href="#" onclick="logout()" class="logout-btn">Sign Out ↗</a>
                 </div>
             </div>
-            <ul class="nav-links">
-                <li><a href="index.html"       class="nav-link">📊 Dashboard</a></li>
-                <li><a href="tournaments.html"       class="nav-link">🏆 Tournaments</a></li>
-                <li><a href="matches.html"       class="nav-link">📋 Matches</a></li>
-                <li><a href="players.html"       class="nav-link">🏏 Players</a></li>
-                <li><a href="teams.html"       class="nav-link active">🛡️ Teams</a></li>
-                <li><a href="rankings.html"       class="nav-link">📈 Rankings</a></li>
-                <li><a href="stats.html"       class="nav-link">🤖 AI Stats</a></li>
-            </ul>
-            <div class="nav-right">
-                <div class="nav-user">
-                    <div class="user-avatar" id="user-avatar">A</div>
-                    <span class="nav-welcome">Welcome, <b id="user-name-display">Admin</b></span>
-                </div>
-                <a href="#" onclick="logout()" class="logout-btn">Sign Out ↗</a>
+            <div class="nav-bottom">
+                <ul class="nav-links">
+                    <li><a href="index.html" class="nav-link">📊 Dashboard</a></li>
+                    <li><a href="tournaments.html" class="nav-link">🏆 Tournament</a></li>
+                    <li><a href="matches.html" class="nav-link">📋 Matches</a></li>
+                    <li><a href="players.html" class="nav-link">🏏 Players</a></li>
+                    <li><a href="teams.html" class="nav-link active">🛡️ Teams</a></li>
+                    <li><a href="stats.html" class="nav-link">🤖 AI Stats</a></li>
+                </ul>
             </div>
         </nav>
 
@@ -112,17 +122,10 @@
             </div>
 
             <div style="display:flex; flex-direction:column; gap:2rem; margin-bottom:1.5rem;">
-                <!-- Squad -->
+                <!-- Squad with Featured Player -->
                 <div class="glass-card">
                     <h3>👥 Roster</h3>
-                    <div class="table-scroll" style="max-height: 400px; overflow-y: auto;">
-                        <table>
-                            <thead>
-                                <tr><th>Name</th><th>Role</th><th>DOB</th></tr>
-                            </thead>
-                            <tbody id="squad-tbody"></tbody>
-                        </table>
-                    </div>
+                    <div id="roster-content"></div>
                 </div>
                 <!-- Match History -->
                 <div class="glass-card">
@@ -142,5 +145,6 @@
 
     <script src="teams.js"></script>
     <script src="parallax.js"></script>
+    <button id="scroll-top-btn" class="scroll-top-btn" title="Back to top">↑</button>
 </body>
 </html>

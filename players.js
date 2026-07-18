@@ -13,8 +13,23 @@ async function authFetch(url, options = {}) {
 const API = 'http://localhost:5001';
 
 let allPlayers   = [];
+let allPlayerStats = {};
 let currentRole  = '';
 let currentSearch = '';
+
+const TEAM_ORDER = [
+    'Pakistan Cricket Team',
+    'Indian Cricket Team',
+    'Australian Cricket Team',
+    'South Africa Cricket Team',
+    'New Zealand Cricket Team',
+    'West Indies Cricket Team'
+];
+
+function teamSortKey(name) {
+    const idx = TEAM_ORDER.indexOf(name);
+    return idx === -1 ? 1000 + name : idx.toString().padStart(4, '0') + name;
+}
 
 function getUser() {
     try { return JSON.parse(localStorage.getItem('cricketUser')); }
@@ -67,16 +82,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await loadPlayers();
     setupForms();
+
+    // Auto-refresh when data changes
+    if (window.DataSync) {
+        DataSync.on('ball-recorded', () => loadPlayers());
+        DataSync.on('match-completed', () => loadPlayers());
+        DataSync.on('data-changed', () => loadPlayers());
+    }
 });
 
 async function loadPlayers() {
     try {
-        const res = await authFetch(`${API}/api/players/by_team`);
-        allPlayers = await res.json(); // dictionary: { teamName: [players...] }
+        // Fetch both profile data and stats
+        const [byTeamRes, statsRes] = await Promise.all([
+            authFetch(`${API}/api/players/by_team`),
+            authFetch(`${API}/api/players/stats`)
+        ]);
+        allPlayers = await byTeamRes.json();
+        const statsArr = await statsRes.json();
+
+        // Index stats by playerID for quick lookup
+        allPlayerStats = {};
+        statsArr.forEach(s => { allPlayerStats[s.playerID] = s; });
         
         const teamSelect = document.getElementById('teamSelect');
         if (teamSelect && teamSelect.options.length === 1) {
-            Object.keys(allPlayers).sort().forEach(team => {
+            Object.keys(allPlayers).sort((a, b) => teamSortKey(a).localeCompare(teamSortKey(b))).forEach(team => {
                 const opt = document.createElement('option');
                 opt.value = team;
                 opt.textContent = team;
@@ -98,8 +129,10 @@ function applyFilters() {
     const filteredTeams = {};
     let totalPlayers = 0;
     
-    for (const [team, players] of Object.entries(allPlayers)) {
+    const sortedKeys = Object.keys(allPlayers).sort((a, b) => teamSortKey(a).localeCompare(teamSortKey(b)));
+    for (const team of sortedKeys) {
         if (currentTeam && team !== currentTeam) continue;
+        const players = allPlayers[team];
         const filtered = players.filter(p => {
             const roleOk   = !currentRole || p.playerRole === currentRole;
             const searchOk = !currentSearch || p.playerName.toLowerCase().includes(currentSearch);
@@ -142,7 +175,7 @@ function renderPlayers(groupedPlayers, totalCount) {
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem;">
                 <h2 style="font-size: 1.4rem; color: #fff;">${team}</h2>
             </div>
-            <div class="players-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5rem;">
+            <div class="players-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.5rem;">
         `;
         
         const TEAM_COLORS = {
@@ -162,36 +195,47 @@ function renderPlayers(groupedPlayers, totalCount) {
             const rc = ROLE_CLASS[p.playerRole] || 'batsman';
             const flagUrl = `https://flagcdn.com/24x18/${getCountryCode(p.playerNationality)}.png`;
             
-            // Generate a CREX-style 2D vector illustration wearing the team's color
             const shirtColor = TEAM_COLORS[team] || 'aaaaaa';
-            const avatarUrl = `Players Pics/${encodeURIComponent(p.playerName)}.png`;
-            const fbUrl = `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(p.playerName)}&clothing=shirtCrewNeck,graphicShirt,blazerAndShirt&clothingColor=${shirtColor}&skinColor=f8d25c,ffdbb4,edb98a,d08b5b,ae5d29,391206&backgroundColor=e2e8f0,f8fafc`;
+            const safeName = p.playerName.replace(/'/g, "\\'");
+            const placeholder = 'dummy.png';
+            const avatarUrl = `Players Pics/${p.playerName}.png`;
+            const cropUrl = `Players Pics/${p.playerName} crop.png`;
 
             html += `
             <div class="player-card role-${rc}">
-                <div class="player-role-icon">${ROLE_EMOJI[p.playerRole] || '🏏'}</div>
-                <div class="player-head" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.5rem;">
-                    <img src="${avatarUrl}" alt="${p.playerName}" style="width: 55px; height: 55px; border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 2px solid #${shirtColor}; background: #fff;">
-                    <div style="display: flex; flex-direction: column; justify-content: center; z-index: 1;">
-                        <div class="player-name" style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.2rem;">${p.playerName}</div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem;">
-                            <img src="${flagUrl}" style="height:12px; border-radius:2px;" onerror="this.style.display='none'"> 
-                            ${p.playerNationality}
-                        </div>
+                <div class="pc-hero">
+                    <img class="pc-hero-img" src="${avatarUrl}" alt="${p.playerName}"
+                         onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='${cropUrl}'}else{this.src='${placeholder}'}">
+                    <span class="pc-role-badge">${ROLE_EMOJI[p.playerRole] || '🏏'} ${p.playerRole}</span>
+                    <div class="pc-flag">
+                        <img src="${flagUrl}" onerror="this.style.display='none'">
+                        ${p.playerNationality}
                     </div>
                 </div>
-                <div class="player-details">
-                    <div class="detail-item"><span class="dlbl">DOB:</span> <span class="dval">${p.playerDOB}</span></div>
-                    <div class="detail-item"><span class="dlbl">Bat:</span> <span class="dval">${p.battingStyle || '-'}</span></div>
-                    <div class="detail-item"><span class="dlbl">Bowl:</span> <span class="dval">${p.bowlingStyle || '-'}</span></div>
-                </div>
-                <div class="player-actions" style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
-                    ${roleBadge(p.playerRole)}
-                    ${getUser()?.isAdmin ? `
-                    <div class="action-btns">
-                        <button class="action-btn" title="Edit" onclick="openEditModal('${p.playerID}')">✏️</button>
-                        <button class="action-btn action-del" title="Delete" onclick="deletePlayer('${p.playerID}', '${p.playerName.replace(/'/g, "\\'")}')">🗑️</button>
-                    </div>` : ''}
+                <div class="pc-body">
+                    <div class="pc-name">${p.playerName}</div>
+                    <div class="pc-telemetry">
+                        <div class="pc-info-row">
+                            <span class="pc-info-label">DOB</span>
+                            <span class="pc-info-value">${p.playerDOB}</span>
+                        </div>
+                        <div class="pc-info-row">
+                            <span class="pc-info-label">Batting</span>
+                            <span class="pc-info-value">${p.battingStyle || '—'}</span>
+                        </div>
+                        <div class="pc-info-row">
+                            <span class="pc-info-label">Bowling</span>
+                            <span class="pc-info-value">${p.bowlingStyle || '—'}</span>
+                        </div>
+                    </div>
+                    <div class="pc-actions">
+                        ${roleBadge(p.playerRole)}
+                        ${getUser()?.isAdmin ? `
+                        <div class="pc-action-btns">
+                            <button class="pc-action-btn" title="Edit" onclick="openEditModal('${p.playerID}')">✏️</button>
+                            <button class="pc-action-btn del" title="Delete" onclick="deletePlayer('${p.playerID}', '${safeName}')">🗑️</button>
+                        </div>` : ''}
+                    </div>
                 </div>
             </div>`;
         });
