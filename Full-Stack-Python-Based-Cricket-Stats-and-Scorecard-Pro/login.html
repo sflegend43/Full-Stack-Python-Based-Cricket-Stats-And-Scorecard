@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏏 CricketStats Pro | Sign In</title>
+    <meta name="description" content="Sign in to CricketStats Pro — the ultimate cricket analytics dashboard.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="cricket_anim.css">
+</head>
+<body>
+
+    <!-- Stadium background (low opacity) -->
+    <div class="stadium-bg-overlay"></div>
+
+    <div class="auth-container">
+        <div class="auth-card">
+            <div style="text-align:center; margin-bottom:2rem;">
+                <div style="font-size:3.5rem; margin-bottom:0.6rem;">🏏</div>
+                <h2>CRICKET<span style="color:#fbbf24; -webkit-text-fill-color:#fbbf24;">STATS</span></h2>
+                <div style="color:#86efac; letter-spacing:4px; font-size:0.72rem; font-weight:700; margin-top:6px;">ANALYTICS PLATFORM</div>
+            </div>
+
+            <h3 style="text-align:center; font-size:1rem; margin-bottom:1.5rem; color:#86efac; background:none; -webkit-text-fill-color:#86efac;">
+                ✨ Welcome back, Admin
+            </h3>
+
+            <div id="flash-message"></div>
+
+            <form id="loginForm" autocomplete="off">
+                <div class="form-group">
+                    <label for="email">📧 Email Address</label>
+                    <input type="email" name="email" id="email" class="form-control"
+                        placeholder="your.email@example.com" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="password">🔒 Password</label>
+                    <input type="password" name="password" id="password" class="form-control"
+                        placeholder="Enter your password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn btn-primary" id="login-btn">
+                    🚀 Login to Dashboard
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <p>New here? <a href="signup.html">Create an account 🏏</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script src="parallax.js"></script>
+</body>
+</html>

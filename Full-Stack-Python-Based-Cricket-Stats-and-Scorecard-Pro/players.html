@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="view-transition" content="same-origin">
+    <title>🏏 CricketStats Pro | Players</title>
+    <meta name="description" content="Browse, search and manage all cricket players in CricketStats Pro.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="cricket_anim.css">
+    <script>if (!localStorage.getItem('cricketUser')) window.location.href = 'login.html';</script>
+    <script src="transitions.js"></script>
+</head>
+<body>
+    <!-- Stadium background (low opacity) -->
+    <div class="stadium-bg-overlay"></div>
+    <div id="flash-container"></div>
+
+    <div class="container">
+        <!-- NAVBAR -->
+        <nav>
+            <div class="nav-top">
+                <div class="nav-left">
+                    <span class="logo-icon">🏏</span>
+                    <div>
+                        <span class="logo-name">CRICKET<span class="logo-pro">STATS</span><span class="logo-sub"> PRO</span></span>
+                    </div>
+                </div>
+                <div class="nav-center">
+                    <div class="ai-pill">
+                        <span class="ai-badge">AI INSIGHT</span>
+                        <span class="ai-text" id="ai-insight-text">Loading predictions...</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-user">
+                        <div class="user-avatar" id="user-avatar">A</div>
+                        <span class="nav-welcome">Welcome, <b id="user-name-display">Admin</b></span>
+                    </div>
+                    <a href="#" onclick="logout()" class="logout-btn">Sign Out ↗</a>
+                </div>
+            </div>
+            <div class="nav-bottom">
+                <ul class="nav-links">
+                    <li><a href="index.html" class="nav-link">📊 Dashboard</a></li>
+                    <li><a href="tournaments.html" class="nav-link">🏆 Tournament</a></li>
+                    <li><a href="matches.html" class="nav-link">📋 Matches</a></li>
+                    <li><a href="players.html" class="nav-link active">🏏 Players</a></li>
+                    <li><a href="teams.html" class="nav-link">🛡️ Teams</a></li>
+                    <li><a href="stats.html" class="nav-link">🤖 AI Stats</a></li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- ═══════════ HEADER ═══════════ -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+            <div>
+                <h1 style="font-size:1.6rem; font-weight:800; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
+                    🏏 Player Registry
+                </h1>
+                <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.2rem;" id="player-count-label">Loading players…</p>
+            </div>
+            <button class="btn-primary admin-only" style="width:auto; margin:0;" onclick="openAddModal()">
+                + Add Player
+            </button>
+        </div>
+
+        <!-- ═══════════ SEARCH + FILTERS ═══════════ -->
+        <div style="display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap;">
+            <div class="search-container" style="flex:1; margin-bottom:0;">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchInput" class="search-input"
+                    placeholder="Search players by name…" oninput="applyFilters()">
+            </div>
+            <select id="teamSelect" class="form-input" style="width:auto; min-width:200px;" onchange="applyFilters()">
+                <option value="">All Teams</option>
+            </select>
+        </div>
+
+        <div class="filter-nav">
+            <button class="filter-btn active" data-role="" onclick="setRoleFilter(this, '')">All Roles</button>
+            <button class="filter-btn" data-role="Batsman"      onclick="setRoleFilter(this, 'Batsman')">🏏 Batsman</button>
+            <button class="filter-btn" data-role="Bowler"       onclick="setRoleFilter(this, 'Bowler')">🎯 Bowler</button>
+            <button class="filter-btn" data-role="AllRounder"   onclick="setRoleFilter(this, 'AllRounder')">⚡ AllRounder</button>
+            <button class="filter-btn" data-role="WicketKeeper" onclick="setRoleFilter(this, 'WicketKeeper')">🧤 WicketKeeper</button>
+        </div>
+
+        <!-- ═══════════ PLAYERS GRID ═══════════ -->
+        <div id="players-grid" class="players-grid"></div>
+    </div>
+
+    <!-- ═══════════ ADD MODAL ═══════════ -->
+    <div id="addModal" class="modal-overlay" style="display:none;">
+        <div class="modal-card glass-card">
+            <div class="modal-header">
+                <h3>➕ Add New Player</h3>
+                <button class="modal-close-x" onclick="closeAddModal()">✕</button>
+            </div>
+            <form id="add-form" onsubmit="event.preventDefault(); submitAddPlayer();" style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Team *</label>
+                    <select id="add-team" required>
+                        <option value="">Select Team...</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Full Name *</label>
+                    <input type="text" id="add-name" placeholder="Player Name" required>
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Date of Birth *</label>
+                    <input type="date" id="add-dob" required>
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Nationality *</label>
+                    <input type="text" id="add-nat" placeholder="e.g. Pakistan" required>
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Batting Style</label>
+                    <select id="add-bat">
+                        <option value="">Select…</option>
+                        <option>Right-Hand</option>
+                        <option>Left-Hand</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Bowling Style</label>
+                    <input type="text" id="add-bowl" placeholder="e.g. Right-arm Fast">
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Player Role *</label>
+                    <select id="add-role" required>
+                        <option value="Batsman">🏏 Batsman</option>
+                        <option value="Bowler">🎯 Bowler</option>
+                        <option value="AllRounder">⚡ AllRounder</option>
+                        <option value="WicketKeeper">🧤 WicketKeeper</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-submit" style="margin-top:0;">✅ Add Player</button>
+                    <button type="button" class="btn-cancel" onclick="closeAddModal()">❌ Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ═══════════ Edit Modal -->
+    <div id="editModal" class="modal-overlay" style="display:none;">
+        <div class="modal-card glass-card">
+            <div class="modal-header">
+                <h3>✏️ Edit Player</h3>
+                <button class="modal-close-x" onclick="closeEditModal()">✕</button>
+            </div>
+            <form id="edit-form" onsubmit="event.preventDefault(); submitEditPlayer();" style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
+                <input type="hidden" id="edit-pid">
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Player Name *</label>
+                    <input type="text" id="edit-name" required>
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Date of Birth *</label>
+                    <input type="date" id="edit-dob" required>
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Nationality *</label>
+                    <input type="text" id="edit-nat" required>
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Batting Style</label>
+                    <select id="edit-bat">
+                        <option value="">-- None --</option>
+                        <option value="Right-Hand">Right-Hand</option>
+                        <option value="Left-Hand">Left-Hand</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Bowling Style</label>
+                    <input type="text" id="edit-bowl">
+                </div>
+                <div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Role *</label>
+                    <select id="edit-role" required>
+                        <option value="Batsman">Batsman</option>
+                        <option value="Bowler">Bowler</option>
+                        <option value="AllRounder">All-Rounder</option>
+                        <option value="WicketKeeper">Wicket-Keeper</option>
+                    </select>
+                </div>
+                <div class="modal-actions" style="margin-top:1rem;">
+                    <button type="button" class="btn-cancel" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="btn-submit">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="players.js"></script>
+    <script src="parallax.js"></script>
+    <button id="scroll-top-btn" class="scroll-top-btn" title="Back to top">↑</button>
+</body>
+</html>

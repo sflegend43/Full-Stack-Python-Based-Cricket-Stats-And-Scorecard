@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="view-transition" content="same-origin">
+    <title>🏏 CricketStats Pro | AI Voice Stats</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="cricket_anim.css">
+    <!-- Chart.js for Year by Year graph -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>if (!localStorage.getItem('cricketUser')) window.location.href = 'login.html';</script>
+    <script src="transitions.js"></script>
+</head>
+<body>
+    <div class="stadium-bg-overlay"></div>
+    <div id="flash-container"></div>
+
+    <div class="container">
+        <!-- NAVBAR -->
+        <nav>
+            <div class="nav-top">
+                <div class="nav-left">
+                    <span class="logo-icon">🏏</span>
+                    <div>
+                        <span class="logo-name">CRICKET<span class="logo-pro">STATS</span><span class="logo-sub"> PRO</span></span>
+                    </div>
+                </div>
+                <div class="nav-center">
+                    <div class="ai-pill">
+                        <span class="ai-badge">AI INSIGHT</span>
+                        <span class="ai-text" id="ai-insight-text">Loading predictions...</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-user">
+                        <div class="user-avatar" id="user-avatar">A</div>
+                        <span class="nav-welcome">Welcome, <b id="user-name-display">Admin</b></span>
+                    </div>
+                    <a href="#" onclick="logout()" class="logout-btn">Sign Out ↗</a>
+                </div>
+            </div>
+            <div class="nav-bottom">
+                <ul class="nav-links">
+                    <li><a href="index.html" class="nav-link">📊 Dashboard</a></li>
+                    <li><a href="tournaments.html" class="nav-link">🏆 Tournament</a></li>
+                    <li><a href="matches.html" class="nav-link">📋 Matches</a></li>
+                    <li><a href="players.html" class="nav-link">🏏 Players</a></li>
+                    <li><a href="teams.html" class="nav-link">🛡️ Teams</a></li>
+                    <li><a href="stats.html" class="nav-link active">🤖 AI Stats</a></li>
+                </ul>
+            </div>
+        </nav>
+
+        <div class="glass-card glow-box" style="text-align: center; padding: 2rem;">
+            <h1 style="color:var(--neon-green); margin-bottom:1rem; font-family:'Orbitron', sans-serif;">📊 Stats Viewer</h1>
+            <p style="color:var(--text-muted); margin-bottom:2rem;">Select a stat type and enter the details to view records.</p>
+            
+            <div style="display:flex; justify-content:center; gap: 1rem; margin-bottom: 1rem;">
+                <select id="stat-type" class="form-input" style="max-width: 200px;" onchange="onStatTypeChange()">
+                    <option value="player">Player Stats</option>
+                    <option value="h2h">Head to Head (Teams)</option>
+                    <option value="pvp">Player vs Player</option>
+                    <option value="pvt">Player vs Team</option>
+                </select>
+            </div>
+            
+            <form id="stats-form" onsubmit="submitStatsQuery(event)" style="display:flex; justify-content:center; gap: 1rem; align-items: flex-end; flex-wrap:wrap;">
+                
+                <!-- Inputs for Player Stats -->
+                <div id="input-player" class="stat-input-group">
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Player Name</label>
+                    <input type="text" id="stat-player-name" class="form-input" placeholder="e.g. Babar Azam">
+                </div>
+                
+                <!-- Inputs for Head to Head -->
+                <div id="input-team1" class="stat-input-group" style="display:none;">
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Team 1</label>
+                    <input type="text" id="stat-team1" class="form-input" placeholder="e.g. Pakistan">
+                </div>
+                <div id="input-team2" class="stat-input-group" style="display:none;">
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Team 2</label>
+                    <input type="text" id="stat-team2" class="form-input" placeholder="e.g. India">
+                </div>
+                
+                <!-- Inputs for Player vs Player -->
+                <div id="input-batsman" class="stat-input-group" style="display:none;">
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Batsman</label>
+                    <input type="text" id="stat-batsman" class="form-input" placeholder="e.g. Babar Azam">
+                </div>
+                <div id="input-bowler" class="stat-input-group" style="display:none;">
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Bowler</label>
+                    <input type="text" id="stat-bowler" class="form-input" placeholder="e.g. Shaheen">
+                </div>
+                
+                <button type="submit" class="btn-submit" style="width:auto; padding: 0.65rem 2rem; border-radius: 8px; margin: 0; margin-bottom: 2px;">
+                    🔍 Get Stats
+                </button>
+            </form>
+        </div>
+
+        <div id="results-container" style="display:none; margin-top:2rem;">
+            <!-- Player Stats Result -->
+            <div id="player-stats-card" class="glass-card" style="display:none;">
+                <h3 id="player-stats-title" style="color:var(--primary-light);">Player Stats</h3>
+                <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-top:1rem;">
+                    <div style="flex:1; min-width:300px;">
+                        <h4 style="color:var(--gold);">Recent Form (Last 5 Matches)</h4>
+                        <table style="width:100%; margin-top:0.5rem;">
+                            <thead><tr><th>Match Date</th><th>Runs Scored</th></tr></thead>
+                            <tbody id="player-recent-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div style="flex:1; min-width:300px; background:rgba(0,0,0,0.3); border-radius:8px; padding:1rem;">
+                        <h4 style="color:var(--neon-green);">Year-by-Year Performance</h4>
+                        <canvas id="player-year-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Generic Text Result -->
+            <div id="generic-stats-card" class="glass-card" style="display:none; text-align:center; padding:2rem;">
+                <h3 id="generic-stats-title" style="color:var(--primary-light); margin-bottom:1rem;">Result</h3>
+                <div id="generic-stats-text" style="font-size:1.4rem; font-weight:700; color:var(--gold);"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="stats.js"></script>
+    <button id="scroll-top-btn" class="scroll-top-btn" title="Back to top">↑</button>
+</body>
+</html>
