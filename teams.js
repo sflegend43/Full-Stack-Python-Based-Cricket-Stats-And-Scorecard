@@ -17,6 +17,13 @@ function getUser() {
     catch { return null; }
 }
 
+document.addEventListener('DOMContentLoaded', () => {
+    const _user = getUser();
+    if (!_user || !_user.isAdmin) {
+        document.querySelectorAll('.admin-only').forEach(el => el.remove());
+    }
+});
+
 function logout() {
     localStorage.removeItem('cricketUser');
     window.location.href = 'login.html';
@@ -61,7 +68,11 @@ const FEATURED_PLAYERS = {
     'Australian Cricket Team': 'Steve Smith',
     'New Zealand Cricket Team': 'Kane Williamson',
     'West Indies Cricket Team': 'Rovman Powell',
-    'South Africa Cricket Team': 'Aiden Markram'
+    'South Africa Cricket Team': 'Aiden Markram',
+    'Afghanistan Cricket Team': 'Rashid Khan',
+    'Bangladesh Cricket Team': 'Litton Das',
+    'England Cricket Team': 'Harry Brook',
+    'Sri Lanka Cricket Team': 'Dasun Shanaka'
 };
 
 // ─── Init ───
@@ -270,7 +281,7 @@ function renderTeamDetail(data) {
                      onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='${featuredCrop}'}else{this.src='${placeholder}'}">
             </div>
             <div class="team-roster-list">
-                <div class="table-scroll" style="max-height: 320px; overflow-y: auto;">
+                <div class="table-scroll" style="max-height: 280px; overflow-y: auto;">
                     <table>
                         <thead><tr><th>Name</th><th>Role</th><th>DOB</th></tr></thead>
                         <tbody>${squadRows}</tbody>
@@ -285,7 +296,7 @@ function renderTeamDetail(data) {
                 <div class="team-roster-empty-text">Featured player coming soon</div>
             </div>
             <div class="team-roster-list">
-                <div class="table-scroll" style="max-height: 320px; overflow-y: auto;">
+                <div class="table-scroll" style="max-height: 280px; overflow-y: auto;">
                     <table>
                         <thead><tr><th>Name</th><th>Role</th><th>DOB</th></tr></thead>
                         <tbody>${squadRows}</tbody>

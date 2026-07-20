@@ -43,6 +43,13 @@ function getUser() {
     try { return JSON.parse(localStorage.getItem('cricketUser')); }
     catch { return null; }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const _user = getUser();
+    if (!_user || !_user.isAdmin) {
+        document.querySelectorAll('.admin-only').forEach(el => el.remove());
+    }
+});
 function logout() {
     localStorage.removeItem('cricketUser');
     window.location.href = 'login.html';
@@ -196,33 +203,74 @@ function renderScorecard(data) {
             ${m.winMargin  ? `<span>📊 ${m.winMargin}</span>` : ''}
         </div>`;
 
-    renderBatTable('inn1-bat-body', data.innings1Bat);
-    renderBatTable('inn2-bat-body', data.innings2Bat);
+    // Determine which team's Playing XI batted in each innings, so we can
+    // list "yet to bat" players. Matches batsmanIDs against each XI.
+    const pickBattingXI = (batRows) => {
+        const ids = new Set((batRows || []).map(b => String(b.batsmanID)));
+        const xi1 = data.team1XI || [];
+        const xi2 = data.team2XI || [];
+        const c1 = xi1.filter(p => ids.has(String(p.playerID))).length;
+        const c2 = xi2.filter(p => ids.has(String(p.playerID))).length;
+        if (c1 === 0 && c2 === 0) return [];
+        return c1 >= c2 ? xi1 : xi2;
+    };
+    renderBatTable('inn1-bat-body', data.innings1Bat, pickBattingXI(data.innings1Bat));
+    renderBatTable('inn2-bat-body', data.innings2Bat, pickBattingXI(data.innings2Bat));
+    renderBatTableClassic('perf-inn1-bat-body', data.innings1Bat);
+    renderBatTableClassic('perf-inn2-bat-body', data.innings2Bat);
     renderBowlTable('inn1-bowl-body', data.innings1Bowl);
     renderBowlTable('inn2-bowl-body', data.innings2Bowl);
     renderXIBoxes(data.match.team1Name, data.team1XI || [], data.match.team2Name, data.team2XI || []);
-    switchInnings(1);
+    switchInnings('inn1');
 }
 
-function renderBatTable(tbId, rows) {
+function renderBatTable(tbId, rows, xiRows) {
     const tb = document.getElementById(tbId);
     if (!tb) return;
-    if (!rows || !rows.length) {
+    rows = rows || [];
+    xiRows = xiRows || [];
+
+    // Players from the batting XI who have not yet come to the crease.
+    const battedIDs = new Set(rows.map(r => String(r.batsmanID)));
+    const roleOrder = { 'Batsman': 1, 'WicketKeeper': 2, 'AllRounder': 3, 'Bowler': 4 };
+    const yetToBat = xiRows
+        .filter(p => !battedIDs.has(String(p.playerID)))
+        .sort((a, b) => (roleOrder[a.playerRole] || 99) - (roleOrder[b.playerRole] || 99));
+
+    if (!rows.length && !yetToBat.length) {
         tb.innerHTML = `<tr><td colspan="7" class="empty-state">No batting data.</td></tr>`;
         return;
     }
-    tb.innerHTML = rows.map(r => {
+
+    // A batter is "out" when a dismissal string exists; otherwise "not out".
+    const battedHTML = rows.map(r => {
         const sr = r.balls ? ((r.runs / r.balls) * 100).toFixed(1) : '0.0';
-        return `<tr>
-            <td><strong>${r.playerName}</strong></td>
-            <td><strong style="color:var(--neon-green);">${r.runs}</strong></td>
-            <td>${r.balls}</td>
-            <td style="color:var(--gold-bright);">⚡${r.fours}</td>
-            <td style="color:var(--red-ball-light);">💥${r.sixes}</td>
-            <td style="color:var(--text-muted);">${sr}</td>
-            <td style="color:var(--text-muted); font-size:0.78rem;">${r.dismissal || '—'}</td>
+        const isOut = !!(r.dismissal && String(r.dismissal).trim());
+        const rowCls = isOut ? 'sc-bat-row sc-out' : 'sc-bat-row sc-notout';
+        const status = isOut ? r.dismissal : 'not out';
+        return `<tr class="${rowCls}">
+            <td class="sc-name">${r.playerName}</td>
+            <td class="sc-dismissal">${status}</td>
+            <td class="sc-num sc-runs">${r.runs}</td>
+            <td class="sc-num">${r.balls}</td>
+            <td class="sc-num sc-fours">${r.fours}</td>
+            <td class="sc-num sc-sixes">${r.sixes}</td>
+            <td class="sc-num sc-sr">${sr}</td>
         </tr>`;
     }).join('');
+
+    const dnbHTML = yetToBat.map(p => `
+        <tr class="sc-bat-row sc-dnb">
+            <td class="sc-name">${p.playerName}</td>
+            <td class="sc-dismissal">yet to bat</td>
+            <td class="sc-num">–</td>
+            <td class="sc-num">–</td>
+            <td class="sc-num">–</td>
+            <td class="sc-num">–</td>
+            <td class="sc-num">–</td>
+        </tr>`).join('');
+
+    tb.innerHTML = battedHTML + dnbHTML;
 }
 
 function renderBowlTable(tbId, rows) {
@@ -242,6 +290,27 @@ function renderBowlTable(tbId, rows) {
             <td><strong style="color:var(--red-ball-light);">${r.wicketsTaken}</strong></td>
             <td>${r.maidens || 0}</td>
             <td style="color:var(--text-muted);">${econ}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderBatTableClassic(tbId, rows) {
+    const tb = document.getElementById(tbId);
+    if (!tb) return;
+    if (!rows || !rows.length) {
+        tb.innerHTML = `<tr><td colspan="7" class="empty-state">No batting data.</td></tr>`;
+        return;
+    }
+    tb.innerHTML = rows.map(r => {
+        const sr = r.balls ? ((r.runs / r.balls) * 100).toFixed(1) : '0.0';
+        return `<tr>
+            <td><strong>${r.playerName}</strong></td>
+            <td><strong style="color:var(--neon-green);">${r.runs}</strong></td>
+            <td>${r.balls}</td>
+            <td style="color:var(--gold-bright);">⚡${r.fours}</td>
+            <td style="color:var(--red-ball-light);">💥${r.sixes}</td>
+            <td style="color:var(--text-muted);">${sr}</td>
+            <td style="color:var(--text-muted); font-size:0.78rem;">${r.dismissal || '—'}</td>
         </tr>`;
     }).join('');
 }
@@ -324,21 +393,56 @@ function renderXIBoxes(team1Name, team1Rows, team2Name, team2Rows) {
 }
 
 function switchInnings(tab) {
-    const panels = ['inn1-card','inn2-card','bowl1-card','bowl2-card','xi-card','balllog-card'];
-    const tabs   = ['tab-inn1','tab-inn2','tab-bowl1','tab-bowl2','tab-xi','tab-balllog'];
+    const panels = ['inn1-card','bowl1-card','inn2-card','bowl2-card','xi-card','details-card'];
+    const tabs   = ['tab-inn1','tab-bowl1','tab-inn2','tab-bowl2','tab-xi','tab-details'];
     panels.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
     tabs.forEach(id   => { const el = document.getElementById(id); if (el) el.classList.remove('active'); });
 
-    const map    = { 1:'inn1-card', 2:'inn2-card', bowl1:'bowl1-card', bowl2:'bowl2-card', xi:'xi-card', balllog:'balllog-card' };
-    const tabMap = { 1:'tab-inn1',  2:'tab-inn2',  bowl1:'tab-bowl1', bowl2:'tab-bowl2', xi:'tab-xi', balllog:'tab-balllog' };
+    const map    = { inn1:'inn1-card', bowl1:'bowl1-card', inn2:'inn2-card', bowl2:'bowl2-card', xi:'xi-card', details:'details-card' };
+    const tabMap = { inn1:'tab-inn1',  bowl1:'tab-bowl1',  inn2:'tab-inn2',  bowl2:'tab-bowl2',  xi:'tab-xi',  details:'tab-details' };
 
     const el    = document.getElementById(map[tab]);
     const tabEl = document.getElementById(tabMap[tab]);
+    if (el)    el.style.display = (tab === 'details') ? 'block' : 'block';
+    if (tabEl) tabEl.classList.add('active');
+
+    // When Detailed Stats is opened, default to Players Performance > 1st Innings Bowling
+    if (tab === 'details') {
+        switchDetailTab('perf');
+    }
+}
+
+function switchDetailTab(sub) {
+    const panels = ['perf-panel','detail-balllog-panel'];
+    const tabs   = ['tab-perf','tab-detail-balllog'];
+    panels.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    tabs.forEach(id   => { const el = document.getElementById(id); if (el) el.classList.remove('active'); });
+
+    const map    = { perf:'perf-panel', 'detail-balllog':'detail-balllog-panel' };
+    const tabMap = { perf:'tab-perf',   'detail-balllog':'tab-detail-balllog' };
+
+    const el    = document.getElementById(map[sub]);
+    const tabEl = document.getElementById(tabMap[sub]);
     if (el)    el.style.display = 'block';
     if (tabEl) tabEl.classList.add('active');
 
-    // Load ball log when that tab is clicked
-    if (tab === 'balllog' && beMatchId) loadBallLog(beMatchId, beInnings);
+    // Load ball log when that sub-tab is clicked
+    if (sub === 'detail-balllog' && beMatchId) loadBallLog(beMatchId, beInnings);
+}
+
+function switchPerfTab(sub) {
+    const panels = ['perf-inn1-card','perf-bowl1-card','perf-inn2-card','perf-bowl2-card'];
+    const tabs   = ['perf-tab-inn1','perf-tab-bowl1','perf-tab-inn2','perf-tab-bowl2'];
+    panels.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    tabs.forEach(id   => { const el = document.getElementById(id); if (el) el.classList.remove('active'); });
+
+    const map    = { inn1:'perf-inn1-card', bowl1:'perf-bowl1-card', inn2:'perf-inn2-card', bowl2:'perf-bowl2-card' };
+    const tabMap = { inn1:'perf-tab-inn1',  bowl1:'perf-tab-bowl1',  inn2:'perf-tab-inn2',  bowl2:'perf-tab-bowl2' };
+
+    const el    = document.getElementById(map[sub]);
+    const tabEl = document.getElementById(tabMap[sub]);
+    if (el)    el.style.display = 'block';
+    if (tabEl) tabEl.classList.add('active');
 }
 
 // ── Delete Match ─────────────────────────────────────────
@@ -1061,7 +1165,37 @@ async function lsRefreshStats() {
             document.getElementById('ls-bowler-r').textContent = '0';
             document.getElementById('ls-bowler-w').textContent = '0';
         }
+
+        // Render broadcast-style batting scorecard below numpad
+        const allBat = beInnings === 1 ? data.innings1Bat : data.innings2Bat;
+        const allXI = beInnings === 1 ? (data.team1XI || []) : (data.team2XI || []);
+        renderBatTable('ls-bat-body', allBat, allXI);
+
+        // Render bowling card
+        const allBowl = beInnings === 1 ? data.innings1Bowl : data.innings2Bowl;
+        renderBowlTable('ls-bowl-body', allBowl);
+
+        // Update title based on active tab
+        const activeTab = document.getElementById('ls-sc-tab-bat')?.classList.contains('active') ? 'bat' : 'bowl';
+        const innLabel = beInnings === 1 ? '1st' : '2nd';
+        const titleEl = document.getElementById('ls-scorecard-title');
+        if (titleEl) titleEl.textContent = activeTab === 'bat' ? `🏏 ${innLabel} Innings — Batting` : `🎯 ${innLabel} Innings — Bowling`;
     } catch(e) {}
+}
+
+function lsSwitchScorecardTab(tab) {
+    const batPanel  = document.getElementById('ls-sc-bat-panel');
+    const bowlPanel = document.getElementById('ls-sc-bowl-panel');
+    const batBtn    = document.getElementById('ls-sc-tab-bat');
+    const bowlBtn   = document.getElementById('ls-sc-tab-bowl');
+    if (batPanel)  batPanel.style.display  = tab === 'bat' ? 'block' : 'none';
+    if (bowlPanel) bowlPanel.style.display = tab === 'bowl' ? 'block' : 'none';
+    if (batBtn)    batBtn.classList.toggle('active', tab === 'bat');
+    if (bowlBtn)   bowlBtn.classList.toggle('active', tab === 'bowl');
+
+    const innLabel = beInnings === 1 ? '1st' : '2nd';
+    const titleEl = document.getElementById('ls-scorecard-title');
+    if (titleEl) titleEl.textContent = tab === 'bat' ? `🏏 ${innLabel} Innings — Batting` : `🎯 ${innLabel} Innings — Bowling`;
 }
 
 async function updateTimeline() {
@@ -1108,7 +1242,8 @@ async function updateTimeline() {
             } else if (b.runsScored > 0) {
                 cls += ' run'; label = String(b.runsScored);
             }
-            html += `<div class="${cls}" title="Over ${b.overNumber}.${b.ballNumber}" onclick="confirmDeleteBall(${b.ballID})">${label}</div>`;
+            const onClickAttr = getUser()?.isAdmin ? ` onclick="confirmDeleteBall(${b.ballID})"` : '';
+            html += `<div class="${cls}" title="Over ${b.overNumber}.${b.ballNumber}"${onClickAttr}>${label}</div>`;
         }
         timeline.innerHTML = html;
     } catch {}
@@ -1386,7 +1521,10 @@ function renderBallLogViz(balls) {
 function renderBallLogTable(balls) {
     const tb = document.getElementById('ball-log-body');
     if (!balls.length) {
-        tb.innerHTML = `<tr><td colspan="8" class="empty-state">No balls recorded yet. Use 🏏 Enter Ball to start scoring.</td></tr>`;
+        const msg = getUser()?.isAdmin 
+            ? "No balls recorded yet. Use 🏏 Enter Ball to start scoring." 
+            : "No balls recorded yet.";
+        tb.innerHTML = `<tr><td colspan="8" class="empty-state">${msg}</td></tr>`;
         return;
     }
     tb.innerHTML = [...balls].reverse().map(b => {
@@ -1433,8 +1571,10 @@ function renderBallLogTable(balls) {
             <td style="color:var(--text-muted);">${extraText}</td>
             <td>${wicket}</td>
             <td>
+                ${getUser()?.isAdmin ? `
                 <button class="btn-view" style="font-size:0.75rem; padding:0.3rem 0.6rem; margin-right:0.3rem;" onclick="editBall(${b.ballID})">✏️</button>
                 <button class="btn-delete" style="font-size:0.75rem; padding:0.3rem 0.6rem;" onclick="confirmDeleteBall(${b.ballID})">↩</button>
+                ` : '<span style="color:var(--text-muted);">—</span>'}
             </td>
         </tr>`;
     }).join('');

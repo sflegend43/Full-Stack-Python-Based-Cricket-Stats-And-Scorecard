@@ -36,6 +36,13 @@ function getUser() {
     catch { return null; }
 }
 
+document.addEventListener('DOMContentLoaded', () => {
+    const _user = getUser();
+    if (!_user || !_user.isAdmin) {
+        document.querySelectorAll('.admin-only').forEach(el => el.remove());
+    }
+});
+
 function logout() {
     localStorage.removeItem('cricketUser');
     window.location.href = 'login.html';

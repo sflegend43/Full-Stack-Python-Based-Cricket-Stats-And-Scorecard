@@ -516,3 +516,39 @@ squads = [
     ('Afghanistan Cricket Team', 'P6C65B541'),
     ('Afghanistan Cricket Team', 'PBAF4BB4C'),
 ]
+
+
+# ─────────────────────────────────────────────────────
+# Venues  (venueID, venueName, venueCity, venueCountry, venueCapacity)
+# Added to fix the /api/seed crash: app.py referenced seed_data.venues
+# which did not exist. Matches require a valid venueID (NOT NULL FK), so
+# without seeded venues no match — and therefore no ball entry — is possible.
+# ─────────────────────────────────────────────────────
+venues = [
+    (1,  'National Stadium',            'Karachi',    'Pakistan',    34000),
+    (2,  'Gaddafi Stadium',             'Lahore',     'Pakistan',    27000),
+    (3,  'Narendra Modi Stadium',       'Ahmedabad',  'India',      132000),
+    (4,  'Eden Gardens',                'Kolkata',    'India',       66000),
+    (5,  'Melbourne Cricket Ground',    'Melbourne',  'Australia',  100024),
+    (6,  'Sydney Cricket Ground',       'Sydney',     'Australia',   48000),
+    (7,  'Lord\'s',                     'London',     'England',     30000),
+    (8,  'The Oval',                    'London',     'England',     25500),
+    (9,  'Newlands',                    'Cape Town',  'South Africa',25000),
+    (10, 'Eden Park',                   'Auckland',   'New Zealand', 42000),
+    (11, 'R. Premadasa Stadium',        'Colombo',    'Sri Lanka',   35000),
+    (12, 'Sheikh Zayed Stadium',        'Abu Dhabi',  'UAE',         20000),
+]
+
+# ─────────────────────────────────────────────────────
+# Umpires  (umpireID, umpireName, umpireNationality, umpireExperienceMatches)
+# ─────────────────────────────────────────────────────
+umpires = [
+    (1, 'Aleem Dar',           'Pakistan',    450),
+    (2, 'Kumar Dharmasena',    'Sri Lanka',   350),
+    (3, 'Marais Erasmus',      'South Africa',300),
+    (4, 'Richard Kettleborough','England',    280),
+    (5, 'Nitin Menon',         'India',       120),
+    (6, 'Rod Tucker',          'Australia',   260),
+    (7, 'Chris Gaffaney',      'New Zealand', 190),
+    (8, 'Michael Gough',       'England',     150),
+]

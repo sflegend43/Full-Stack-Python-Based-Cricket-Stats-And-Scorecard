@@ -62,18 +62,16 @@ if (signupForm) {
         const fullname = signupForm.fullname.value.trim();
         const email    = signupForm.email.value.trim();
         const password = signupForm.password.value.trim();
-        
-        let payload = { fullname, email, password };
-        
-        if (signupForm.role) {
-            payload.role = signupForm.role.value;
-            if (payload.role === 'admin') {
-                payload.adminKey = signupForm.adminKey.value.trim();
-            }
+        const payload = { fullname, email, password };
+
+        // Role is never trusted client-side — only send the optional admin key for backend validation.
+        const adminKey = signupForm.adminKey?.value.trim();
+        if (adminKey) {
+            payload.adminKey = adminKey;
         }
 
         try {
-            const res = await fetch(`${API}/api/signup`, {
+            const res = await fetch(`${API}/api/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

@@ -107,110 +107,162 @@
             </div>
             <div id="scorecard-header-box"></div>
 
-            <!-- Innings Tabs -->
+            <!-- Main Scorecard Tabs -->
             <div class="innings-tab-group">
-                <button class="innings-tab active" id="tab-inn1"  onclick="switchInnings(1)">🏏 1st Innings — Batting</button>
-                <button class="innings-tab" id="tab-inn2"          onclick="switchInnings(2)">🏏 2nd Innings — Batting</button>
-                <button class="innings-tab" id="tab-bowl1"         onclick="switchInnings('bowl1')">🎯 1st Innings — Bowling</button>
-                <button class="innings-tab" id="tab-bowl2"         onclick="switchInnings('bowl2')">🎯 2nd Innings — Bowling</button>
-                <button class="innings-tab" id="tab-xi"            onclick="switchInnings('xi')">👥 Playing XI</button>
-                <button class="innings-tab" id="tab-balllog"       onclick="switchInnings('balllog')">📋 Ball Log</button>
+                <button class="innings-tab active" id="tab-inn1"    onclick="switchInnings('inn1')">🏏 1st Innings Batting</button>
+                <button class="innings-tab" id="tab-bowl1"          onclick="switchInnings('bowl1')">🎯 1st Innings Bowling</button>
+                <button class="innings-tab" id="tab-inn2"           onclick="switchInnings('inn2')">🏏 2nd Innings Batting</button>
+                <button class="innings-tab" id="tab-bowl2"          onclick="switchInnings('bowl2')">🎯 2nd Innings Bowling</button>
+                <button class="innings-tab" id="tab-xi"             onclick="switchInnings('xi')">👥 Playing XI</button>
+                <button class="innings-tab" id="tab-details"        onclick="switchInnings('details')">📊 Detailed Stats</button>
             </div>
 
-            <!-- Batting Scorecard 1 -->
-            <div id="inn1-card" class="glass-card">
-                <h3>🏏 1st Innings — Batting</h3>
+            <!-- ═══ 1st Innings Batting ═══ -->
+            <div id="inn1-card" class="glass-card" style="display:none;">
+                <h3 style="margin-bottom:1rem;">🏏 1st Innings — Batting</h3>
                 <div class="table-scroll">
                     <table>
-                        <thead><tr><th>Batsman</th><th>Runs</th><th>Balls</th><th>4s</th><th>6s</th><th>SR</th><th>Dismissal</th></tr></thead>
-                        <tbody id="inn1-bat-body"></tbody>
+                        <thead><tr><th>Batsman</th><th></th><th style="text-align:right;">Runs</th><th style="text-align:right;">Balls</th><th style="text-align:right;">4s</th><th style="text-align:right;">6s</th><th style="text-align:right;">SR</th></tr></thead>
+                        <tbody id="inn1-bat-body" class="sc-bat-body"></tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- Batting Scorecard 2 -->
-            <div id="inn2-card" class="glass-card" style="display:none;">
-                <h3>🏏 2nd Innings — Batting</h3>
-                <div class="table-scroll">
-                    <table>
-                        <thead><tr><th>Batsman</th><th>Runs</th><th>Balls</th><th>4s</th><th>6s</th><th>SR</th><th>Dismissal</th></tr></thead>
-                        <tbody id="inn2-bat-body"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Bowling Scorecard 1 -->
+            <!-- ═══ 1st Innings Bowling (Placeholder) ═══ -->
             <div id="bowl1-card" class="glass-card" style="display:none;">
-                <h3>🎯 1st Innings — Bowling</h3>
+                <div style="text-align:center; padding:3rem 1rem; color:var(--text-muted);">
+                    <div style="font-size:2rem; margin-bottom:0.5rem;">🎯</div>
+                    <p style="font-size:1rem;">1st Innings Bowling — coming soon</p>
+                </div>
+            </div>
+
+            <!-- ═══ 2nd Innings Batting ═══ -->
+            <div id="inn2-card" class="glass-card" style="display:none;">
+                <h3 style="margin-bottom:1rem;">🏏 2nd Innings — Batting</h3>
                 <div class="table-scroll">
                     <table>
-                        <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Maidens</th><th>Economy</th></tr></thead>
-                        <tbody id="inn1-bowl-body"></tbody>
+                        <thead><tr><th>Batsman</th><th></th><th style="text-align:right;">Runs</th><th style="text-align:right;">Balls</th><th style="text-align:right;">4s</th><th style="text-align:right;">6s</th><th style="text-align:right;">SR</th></tr></thead>
+                        <tbody id="inn2-bat-body" class="sc-bat-body"></tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- Bowling Scorecard 2 -->
+            <!-- ═══ 2nd Innings Bowling (Placeholder) ═══ -->
             <div id="bowl2-card" class="glass-card" style="display:none;">
-                <h3>🎯 2nd Innings — Bowling</h3>
-                <div class="table-scroll">
-                    <table>
-                        <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Maidens</th><th>Economy</th></tr></thead>
-                        <tbody id="inn2-bowl-body"></tbody>
-                    </table>
+                <div style="text-align:center; padding:3rem 1rem; color:var(--text-muted);">
+                    <div style="font-size:2rem; margin-bottom:0.5rem;">🎯</div>
+                    <p style="font-size:1rem;">2nd Innings Bowling — coming soon</p>
                 </div>
             </div>
 
-            <!-- Playing XI -->
+            <!-- ═══ Playing XI ═══ -->
             <div id="xi-card" class="glass-card" style="display:none; padding:1.5rem;">
                 <h3 style="text-align:center; margin-bottom:1.5rem;">👥 Playing XI</h3>
                 <div style="display: flex; gap: 2rem; justify-content: space-between; flex-wrap: wrap;">
-                    <!-- Team 1 Box -->
                     <div style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
                         <h4 id="xi-team1-name" style="text-align:center; color:var(--primary-light); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem;">Team 1</h4>
-                        <ul id="xi-team1-list" style="list-style: none; padding: 0; margin: 0;">
-                            <!-- JS will populate -->
-                        </ul>
+                        <ul id="xi-team1-list" style="list-style: none; padding: 0; margin: 0;"></ul>
                     </div>
-                    <!-- Team 2 Box -->
                     <div style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
                         <h4 id="xi-team2-name" style="text-align:center; color:var(--primary-light); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem;">Team 2</h4>
-                        <ul id="xi-team2-list" style="list-style: none; padding: 0; margin: 0;">
-                            <!-- JS will populate -->
-                        </ul>
+                        <ul id="xi-team2-list" style="list-style: none; padding: 0; margin: 0;"></ul>
                     </div>
                 </div>
             </div>
 
-            <!-- Ball Log tab panel -->
-            <div id="balllog-card" class="glass-card" style="display:none;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.6rem;">
-                    <h3 style="margin:0;">📋 Ball-by-Ball Log</h3>
-                    <div style="display:flex; gap:0.5rem;">
-                        <button class="filter-btn active" id="log-inn-1" onclick="filterBallLog(1)">1st Innings</button>
-                        <button class="filter-btn" id="log-inn-2" onclick="filterBallLog(2)">2nd Innings</button>
+            <!-- ═══ Detailed Stats ═══ -->
+            <div id="details-card" style="display:none;">
+
+                <!-- Detailed Stats Sub-Tabs -->
+                <div class="innings-tab-group" style="margin-bottom:1.2rem;">
+                    <button class="innings-tab active" id="tab-perf"     onclick="switchDetailTab('perf')">📊 Players Performance</button>
+                    <button class="innings-tab" id="tab-detail-balllog"  onclick="switchDetailTab('detail-balllog')">📋 Ball Log</button>
+                </div>
+
+                <!-- ─── Players Performance ─── -->
+                <div id="perf-panel" style="display:block;">
+                    <!-- Players Performance Sub-Sub-Tabs -->
+                    <div class="innings-tab-group detail-sub-tabs" style="margin-bottom:1rem;">
+                        <button class="innings-tab active" id="perf-tab-inn1"  onclick="switchPerfTab('inn1')">🏏 1st Innings Batting</button>
+                        <button class="innings-tab" id="perf-tab-bowl1"        onclick="switchPerfTab('bowl1')">🎯 1st Innings Bowling</button>
+                        <button class="innings-tab" id="perf-tab-inn2"         onclick="switchPerfTab('inn2')">🏏 2nd Innings Batting</button>
+                        <button class="innings-tab" id="perf-tab-bowl2"        onclick="switchPerfTab('bowl2')">🎯 2nd Innings Bowling</button>
+                    </div>
+
+                    <!-- 1st Innings Batting (Old-style) -->
+                    <div id="perf-inn1-card" class="glass-card">
+                        <h3>🏏 1st Innings — Batting</h3>
+                        <div class="table-scroll">
+                            <table>
+                                <thead><tr><th>Batsman</th><th>Runs</th><th>Balls</th><th>4s</th><th>6s</th><th>SR</th><th>Dismissal</th></tr></thead>
+                                <tbody id="perf-inn1-bat-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 1st Innings Bowling -->
+                    <div id="perf-bowl1-card" class="glass-card" style="display:none;">
+                        <h3>🎯 1st Innings — Bowling</h3>
+                        <div class="table-scroll">
+                            <table>
+                                <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Maidens</th><th>Economy</th></tr></thead>
+                                <tbody id="inn1-bowl-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 2nd Innings Batting (Old-style) -->
+                    <div id="perf-inn2-card" class="glass-card" style="display:none;">
+                        <h3>🏏 2nd Innings — Batting</h3>
+                        <div class="table-scroll">
+                            <table>
+                                <thead><tr><th>Batsman</th><th>Runs</th><th>Balls</th><th>4s</th><th>6s</th><th>SR</th><th>Dismissal</th></tr></thead>
+                                <tbody id="perf-inn2-bat-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 2nd Innings Bowling -->
+                    <div id="perf-bowl2-card" class="glass-card" style="display:none;">
+                        <h3>🎯 2nd Innings — Bowling</h3>
+                        <div class="table-scroll">
+                            <table>
+                                <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Maidens</th><th>Economy</th></tr></thead>
+                                <tbody id="inn2-bowl-body"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-                <!-- Over-by-over visualiser -->
-                <div id="ball-over-viz" style="margin-bottom:1.2rem; display:flex; flex-wrap:wrap; gap:0.5rem;"></div>
-                <!-- Detailed table -->
-                <div class="table-scroll">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Over.Ball</th>
-                                <th>Batsman</th>
-                                <th>Bowler</th>
-                                <th>Delivery</th>
-                                <th>Runs</th>
-                                <th>Extras</th>
-                                <th>Wicket</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="ball-log-body"></tbody>
-                    </table>
+
+                <!-- ─── Ball Log ─── -->
+                <div id="detail-balllog-panel" class="glass-card" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.6rem;">
+                        <h3 style="margin:0;">📋 Ball-by-Ball Log</h3>
+                        <div style="display:flex; gap:0.5rem;">
+                            <button class="filter-btn active" id="log-inn-1" onclick="filterBallLog(1)">1st Innings</button>
+                            <button class="filter-btn" id="log-inn-2" onclick="filterBallLog(2)">2nd Innings</button>
+                        </div>
+                    </div>
+                    <div id="ball-over-viz" style="margin-bottom:1.2rem; display:flex; flex-wrap:wrap; gap:0.5rem;"></div>
+                    <div class="table-scroll">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Over.Ball</th>
+                                    <th>Batsman</th>
+                                    <th>Bowler</th>
+                                    <th>Delivery</th>
+                                    <th>Runs</th>
+                                    <th>Extras</th>
+                                    <th>Wicket</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ball-log-body"></tbody>
+                        </table>
+                    </div>
                 </div>
+
             </div>
 
         </div>
@@ -359,9 +411,53 @@
             </div>
 
         </div>
-    </div>
 
-    <!-- ═══ LIVE SCORING SUB-MODALS ═══ -->
+        <!-- LIVE BATTING/BOWLING SCORECARD -->
+        <div class="glass-card" id="ls-scorecard-card" style="margin-top:1.5rem;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+                <h3 id="ls-scorecard-title" style="margin:0;">🏏 Batting Scorecard</h3>
+                <div style="display:flex; gap:0.4rem;">
+                    <button class="filter-btn active" id="ls-sc-tab-bat" onclick="lsSwitchScorecardTab('bat')">🏏 Batting</button>
+                    <button class="filter-btn" id="ls-sc-tab-bowl" onclick="lsSwitchScorecardTab('bowl')">🎯 Bowling</button>
+                </div>
+            </div>
+
+            <!-- Batting Panel -->
+            <div id="ls-sc-bat-panel">
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr>
+                            <th>Batsman</th><th></th>
+                            <th style="text-align:right;">Runs</th>
+                            <th style="text-align:right;">Balls</th>
+                            <th style="text-align:right;">4s</th>
+                            <th style="text-align:right;">6s</th>
+                            <th style="text-align:right;">SR</th>
+                        </tr></thead>
+                        <tbody id="ls-bat-body" class="sc-bat-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Bowling Panel -->
+            <div id="ls-sc-bowl-panel" style="display:none;">
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr>
+                            <th>Bowler</th>
+                            <th>Overs</th>
+                            <th>Runs</th>
+                            <th>Wickets</th>
+                            <th>Maidens</th>
+                            <th>Economy</th>
+                        </tr></thead>
+                        <tbody id="ls-bowl-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
     <!-- Extras Modal -->
     <div id="lsExtraModal" class="modal-overlay" style="display:none; z-index: 2500; background: rgba(0,0,0,0.8);">
         <div class="modal-card glass-card" style="max-width:320px; width:90%; text-align:center;">

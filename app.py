@@ -63,7 +63,15 @@ def requires_admin(f):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH  = os.path.join(BASE_DIR, 'cricket_stats.db')
 
+# Server-side only — never expose in HTML/JS. Override in production via CRICKET_ADMIN_KEY.
+_ADMIN_KEY_DEV_FALLBACK = 'CRICKET_ADMIN_2026'
+
 app = Flask(__name__, static_folder=BASE_DIR, static_url_path='')
+
+
+def get_admin_registration_key():
+    """Return the master admin registration key (env var preferred)."""
+    return os.environ.get('CRICKET_ADMIN_KEY', _ADMIN_KEY_DEV_FALLBACK)
 
 
 # ─────────────────────────────────────────────────────
@@ -278,14 +286,27 @@ def serve_html_page(page):
 # ─────────────────────────────────────────────────────
 # AUTH API
 # ─────────────────────────────────────────────────────
-@app.route('/api/signup', methods=['POST'])
-def signup():
-    data     = request.get_json(silent=True) or {}
+def _resolve_registration_role(admin_key_submitted):
+    """Default to 'user'; promote to 'admin' only when the backend key matches."""
+    if not admin_key_submitted:
+        return 'user', 0
+
+    expected = get_admin_registration_key()
+    if admin_key_submitted != expected:
+        return None, None  # caller returns 403
+
+    return 'admin', 1
+
+
+def register_user(data):
+    """Unified registration handler for user and admin sign-ups."""
     fullname = (data.get('fullname') or '').strip()
     email    = (data.get('email')    or '').strip().lower()
     password = (data.get('password') or '').strip()
-    role     = (data.get('role')     or '').strip().lower()
-    adminKey = (data.get('adminKey') or '').strip()
+    admin_key = (
+        (data.get('adminKey') or data.get('admin_token') or '')
+        .strip()
+    )
 
     if not fullname or not email or not password:
         return jsonify({'error': 'All fields are required'}), 400
@@ -294,23 +315,45 @@ def signup():
     if len(password) < 6:
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
 
-    is_admin = 0
-    if role == 'admin':
-        admin_key_expected = os.environ.get('CRICKET_ADMIN_KEY', 'CRICKET_ADMIN_2026')
-        if adminKey != admin_key_expected:
-            return jsonify({'error': 'Invalid Admin Registration Key'}), 403
-        is_admin = 1
+    role, is_admin = _resolve_registration_role(admin_key)
+    if role is None:
+        return jsonify({'error': 'Invalid admin registration key'}), 403
 
-    token = secrets.token_hex(32)
+    session_token = secrets.token_hex(32)
+    hashed_password = generate_password_hash(password)
+
     try:
         with get_db() as conn:
             conn.execute(
                 'INSERT INTO users (fullname, email, password, isAdmin, token) VALUES (?, ?, ?, ?, ?)',
-                (fullname, email, generate_password_hash(password), is_admin, token)
+                (fullname, email, hashed_password, is_admin, session_token)
             )
-        return jsonify({'message': 'Account created successfully', 'user': {'fullname': fullname, 'email': email, 'isAdmin': bool(is_admin), 'token': token}}), 201
+        return jsonify({
+            'message': 'Account created successfully',
+            'user': {
+                'fullname': fullname,
+                'email': email,
+                'role': role,
+                'isAdmin': bool(is_admin),
+                'token': session_token,
+            },
+        }), 201
     except sqlite3.IntegrityError:
         return jsonify({'error': 'Email already registered. Please log in instead.'}), 400
+
+
+@app.route('/api/register', methods=['POST'])
+def register():
+    """Unified registration endpoint — role defaults to user unless a valid admin key is supplied."""
+    data = request.get_json(silent=True) or {}
+    return register_user(data)
+
+
+@app.route('/api/signup', methods=['POST'])
+def signup():
+    """Backward-compatible alias for /api/register."""
+    data = request.get_json(silent=True) or {}
+    return register_user(data)
 
 
 @app.route('/api/login', methods=['POST'])
@@ -341,7 +384,15 @@ def login():
             conn.execute('UPDATE users SET token=? WHERE id=?', (updates['token'], user['id']))
 
     is_admin = bool(user['isAdmin']) if 'isAdmin' in user.keys() else False
-    return jsonify({'user': {'fullname': user['fullname'], 'email': user['email'], 'isAdmin': is_admin, 'token': token}})
+    return jsonify({
+        'user': {
+            'fullname': user['fullname'],
+            'email': user['email'],
+            'role': 'admin' if is_admin else 'user',
+            'isAdmin': is_admin,
+            'token': token,
+        },
+    })
 
 
 import seed_data
@@ -720,13 +771,18 @@ def add_playing_xi(match_id):
 @app.route('/api/matches/<int:match_id>', methods=['DELETE'])
 @requires_admin
 def delete_match(match_id):
-    with get_db() as conn:
-        conn.execute('DELETE FROM BallByBall WHERE matchID=?', (match_id,))
-        conn.execute('DELETE FROM PlayingXI  WHERE matchID=?', (match_id,))
-        r = conn.execute('DELETE FROM Matches WHERE matchID=?', (match_id,))
-        if r.rowcount == 0:
-            return jsonify({'error': 'Match not found'}), 404
-    return jsonify({'message': 'Match deleted'})
+    try:
+        with get_db() as conn:
+            conn.execute('DELETE FROM BallByBall WHERE matchID=?', (match_id,))
+            conn.execute('DELETE FROM PlayingXI  WHERE matchID=?', (match_id,))
+            conn.execute('DELETE FROM MatchState WHERE matchID=?', (match_id,))
+            r = conn.execute('DELETE FROM Matches WHERE matchID=?', (match_id,))
+            if r.rowcount == 0:
+                return jsonify({'error': 'Match not found'}), 404
+        return jsonify({'message': 'Match deleted'})
+    except Exception as e:
+        print(f'DELETE MATCH ERROR: {e}')
+        return jsonify({'error': str(e)}), 500
 
 
 # ─────────────────────────────────────────────────────
@@ -781,6 +837,7 @@ def delete_tournament(name):
                 mid = m['matchID']
                 conn.execute('DELETE FROM BallByBall WHERE matchID=?', (mid,))
                 conn.execute('DELETE FROM PlayingXI WHERE matchID=?', (mid,))
+                conn.execute('DELETE FROM MatchState WHERE matchID=?', (mid,))
             conn.execute('DELETE FROM Matches WHERE tournamentName = ?', (name,))
             
             # Now delete parent
@@ -853,7 +910,7 @@ def leaderboard():
         batsmen = conn.execute(f'''
             SELECT b.batsmanID AS playerID, p.playerName, p.playerNationality,
                    SUM(b.runsScored) AS totalRuns,
-                   SUM(CASE WHEN b.extraType='Retired' THEN 0 ELSE 1 END) AS ballsFaced,
+                   SUM(CASE WHEN b.extraType IN ('Retired','Wide') THEN 0 ELSE 1 END) AS ballsFaced,
                    SUM(CASE WHEN b.runsScored=4 THEN 1 ELSE 0 END) AS fours,
                    SUM(CASE WHEN b.runsScored=6 THEN 1 ELSE 0 END) AS sixes
             FROM BallByBall b
@@ -907,7 +964,7 @@ def scorecard(match_id):
             return conn.execute('''
                 SELECT b.batsmanID, p.playerName,
                        SUM(b.runsScored) AS runs,
-                       SUM(CASE WHEN b.extraType='Retired' THEN 0 ELSE 1 END) AS balls,
+                       SUM(CASE WHEN b.extraType IN ('Retired','Wide') THEN 0 ELSE 1 END) AS balls,
                        SUM(CASE WHEN b.runsScored=4 THEN 1 ELSE 0 END) AS fours,
                        SUM(CASE WHEN b.runsScored=6 THEN 1 ELSE 0 END) AS sixes,
                        MAX(CASE WHEN b.dismissedPlayerID=b.batsmanID
@@ -923,14 +980,23 @@ def scorecard(match_id):
                 SELECT b.bowlerID, p.playerName,
                        SUM(CASE WHEN (b.extraType IS NULL OR b.extraType NOT IN ('Wide','NoBall','Retired'))
                                 THEN 1 ELSE 0 END) AS ballsBowled,
-                       SUM(b.runsScored+b.extras) AS runsConceded,
+                       SUM(b.runsScored + CASE WHEN b.extraType IN ('Wide','NoBall')
+                                               THEN b.extras ELSE 0 END) AS runsConceded,
                        SUM(CASE WHEN b.wicketFallen=1 AND (b.wicketType IS NULL OR b.wicketType != 'RetiredOut')
                                 THEN 1 ELSE 0 END) AS wicketsTaken,
-                       SUM(CASE WHEN (b.extraType IS NULL OR b.extraType NOT IN ('Wide','NoBall','Retired'))
+                       SUM(CASE WHEN b.extraType IN ('Wide','NoBall')
                                 THEN b.extras ELSE 0 END) AS extras,
-                       SUM(CASE WHEN (b.extraType IS NULL OR b.extraType NOT IN ('Wide','NoBall','Retired'))
-                                    AND b.wicketFallen=0 AND b.runsScored=0
-                                    AND (b.extras=0 OR b.extras IS NULL) THEN 1 ELSE 0 END) AS maidens
+                       (SELECT COUNT(*) FROM (
+                            SELECT bo.overNumber
+                            FROM BallByBall bo
+                            WHERE bo.matchID=b.matchID AND bo.inningsNumber=b.inningsNumber
+                                  AND bo.bowlerID=b.bowlerID
+                            GROUP BY bo.overNumber
+                            HAVING SUM(CASE WHEN (bo.extraType IS NULL OR bo.extraType NOT IN ('Wide','NoBall','Retired'))
+                                            THEN 1 ELSE 0 END) >= 6
+                               AND SUM(bo.runsScored + CASE WHEN bo.extraType IN ('Wide','NoBall')
+                                                            THEN bo.extras ELSE 0 END) = 0
+                       )) AS maidens
                 FROM BallByBall b
                 JOIN Players p ON b.bowlerID = p.playerID
                 WHERE b.matchID=? AND b.inningsNumber=?
@@ -939,7 +1005,7 @@ def scorecard(match_id):
 
         def get_playing_xi(team_name):
             return conn.execute('''
-                SELECT p.playerName, p.playerRole, p.battingStyle, p.bowlingStyle, xi.matchRole
+                SELECT p.playerID, p.playerName, p.playerRole, p.battingStyle, p.bowlingStyle, xi.matchRole
                 FROM PlayingXI xi
                 JOIN Players p ON xi.playerID = p.playerID
                 JOIN Squad s ON p.playerID = s.playerID
@@ -1009,20 +1075,28 @@ def team_rankings():
 @app.route('/api/rankings/players', methods=['GET'])
 def player_rankings():
     format_filter = request.args.get('format', '').strip()
-    join_clause = " JOIN Matches m ON b.matchID = m.matchID " if format_filter else ""
-    where_clause = " WHERE m.matchFormat = ? " if format_filter else ""
-    params = (format_filter,) if format_filter else ()
-    
+    # Runs are credited to the batsman; wickets are credited to the bowler
+    # (excluding RetiredOut). Computed as independent subqueries so a bowler's
+    # wickets are never confused with dismissals that fell while they batted.
+    jm  = " JOIN Matches m ON b.matchID = m.matchID " if format_filter else ""
+    fmt = " AND m.matchFormat = ? " if format_filter else ""
+    params = (format_filter, format_filter) if format_filter else ()
+
     with get_db() as conn:
         rows = conn.execute(f'''
             SELECT p.playerID, p.playerName, p.playerNationality, p.playerRole,
-                   SUM(b.runsScored) AS totalRuns,
-                   SUM(b.wicketFallen) AS totalWickets
+                   COALESCE((
+                       SELECT SUM(b.runsScored) FROM BallByBall b {jm}
+                       WHERE b.batsmanID = p.playerID {fmt}
+                   ), 0) AS totalRuns,
+                   COALESCE((
+                       SELECT SUM(CASE WHEN b.wicketFallen=1
+                                        AND (b.wicketType IS NULL OR b.wicketType != 'RetiredOut')
+                                       THEN 1 ELSE 0 END)
+                       FROM BallByBall b {jm}
+                       WHERE b.bowlerID = p.playerID {fmt}
+                   ), 0) AS totalWickets
             FROM Players p
-            JOIN BallByBall b ON p.playerID = b.batsmanID
-            {join_clause}
-            {where_clause}
-            GROUP BY p.playerID
             ORDER BY totalRuns DESC
             LIMIT 100
         ''', params).fetchall()
@@ -1083,8 +1157,15 @@ def get_ball_state(match_id):
         # playing XI for this match (both teams). canBowl includes anyone with a
         # bowling style on record, not just designated Bowlers/AllRounders.
         xi = conn.execute('''
-            SELECT px.playerID, p.playerName, p.playerRole, px.teamName,
-                   CASE WHEN p.playerRole IN ('Batsman','AllRounder','WicketKeeper') THEN 1 ELSE 0 END AS canBat,
+            SELECT px.playerID, p.playerName, p.playerRole,
+                   p.battingStyle, p.bowlingStyle,
+                   -- Fall back to the player's Squad team if the XI row has no
+                   -- teamName recorded, so the batting/bowling split is never empty.
+                   COALESCE(px.teamName,
+                            (SELECT s.teamName FROM Squad s
+                             WHERE s.playerID = px.playerID LIMIT 1)) AS teamName,
+                   px.rowid AS xiOrder,
+                   1 AS canBat,  -- any of the 11 may bat (tail-enders included)
                    CASE WHEN p.playerRole IN ('Bowler','AllRounder')
                         OR (p.bowlingStyle IS NOT NULL AND TRIM(LOWER(p.bowlingStyle)) NOT IN ('', 'none'))
                         THEN 1 ELSE 0 END AS canBowl
@@ -1162,15 +1243,16 @@ def get_ball_state(match_id):
     bowling_team = None
     if match:
         toss_winner = match['tossWinnerName']
-        toss_decision = match['tossDecision'] # Bat or Bowl
+        # Normalise so 'Bat'/'bat'/'BAT' (and 'Bowl'/'bowl'/'field') all match.
+        toss_decision = (match['tossDecision'] or '').strip().lower()
         team1 = match['team1Name']
         team2 = match['team2Name']
         other_team = team2 if toss_winner == team1 else team1
 
-        if toss_decision == 'Bat':
+        if toss_decision in ('bat', 'batting'):
             inn1_bat = toss_winner
             inn1_bowl = other_team
-        elif toss_decision == 'Bowl':
+        elif toss_decision in ('bowl', 'bowling', 'field', 'fielding'):
             inn1_bat = other_team
             inn1_bowl = toss_winner
         else:
@@ -1186,6 +1268,63 @@ def get_ball_state(match_id):
 
     max_overs = MAX_OVERS_PER_BOWLER.get(match['matchFormat']) if match else None
 
+    # ── Build ready-to-render selection lists ─────────────────────────────
+    # Every eligible player is INCLUDED (so the UI can show them) but flagged
+    # selectable / disabled with a reason. Sorted by Playing XI role priority.
+    ROLE_PRIORITY = {'Batsman': 1, 'WicketKeeper': 2, 'AllRounder': 3, 'Bowler': 4}
+    xi_list = [dict(r) for r in xi]
+    name_map = {r['playerID']: r['playerName'] for r in xi_list}
+
+    def _overs_bowled(pid):
+        return bowler_overs.get(pid, {}).get('overs', 0)
+
+    def _at_max(pid):
+        return max_overs is not None and _overs_bowled(pid) >= max_overs
+
+    def _sort_key(p):
+        return (ROLE_PRIORITY.get(p.get('playerRole'), 9), p.get('xiOrder') or 0,
+                p.get('playerName') or '')
+
+    # Bowling pool = bowling team's XI who can bowl
+    bowling_pool = [p for p in xi_list if p['teamName'] == bowling_team and p['canBowl']]
+    # Are there OTHER bowlers still available? (drives the consecutive-over bypass)
+    others_available = sum(
+        1 for p in bowling_pool
+        if p['playerID'] != last_over_bowler_id and not _at_max(p['playerID'])
+    )
+
+    batting_options = []
+    for p in sorted([x for x in xi_list if x['teamName'] == batting_team], key=_sort_key):
+        pid = p['playerID']
+        reason = None
+        if pid in dismissed_ids:
+            reason = 'out'                # already dismissed / retired out this innings
+        elif pid == striker_id:
+            reason = 'batting'            # currently on strike
+        elif pid == nonstriker_id:
+            reason = 'non-striker'        # at the non-striker's end
+        opt = dict(p)
+        opt['selectable'] = reason is None
+        opt['disabled'] = reason is not None
+        opt['reason'] = reason
+        batting_options.append(opt)
+
+    bowling_options = []
+    for p in sorted(bowling_pool, key=_sort_key):
+        pid = p['playerID']
+        reason = None
+        if _at_max(pid):
+            reason = 'overs-complete'     # bowled their maximum overs for the format
+        elif pid == last_over_bowler_id and others_available > 0:
+            reason = 'bowled-last-over'   # cannot bowl two consecutive overs
+        opt = dict(p)
+        opt['oversBowled'] = _overs_bowled(pid)
+        opt['ballsThisOver'] = bowler_overs.get(pid, {}).get('balls', 0)
+        opt['selectable'] = reason is None
+        opt['disabled'] = reason is not None
+        opt['reason'] = reason
+        bowling_options.append(opt)
+
     return jsonify({
         'nextOver':          over,
         'nextBall':          next_ball,
@@ -1194,15 +1333,20 @@ def get_ball_state(match_id):
         'legalBalls':        agg['legalBalls'] or 0,
         'battingTeam':       batting_team,
         'bowlingTeam':       bowling_team,
-        'players':           [dict(r) for r in xi],
+        'players':           xi_list,
+        'battingOptions':    batting_options,
+        'bowlingOptions':    bowling_options,
         'match':             dict(match) if match else {},
         'dismissedPlayerIDs': dismissed_ids,
         'bowlerOvers':       bowler_overs,
         'maxOversPerBowler': max_overs,
         'lastOverBowlerID':  last_over_bowler_id,
         'strikerID':          striker_id,
+        'strikerName':        name_map.get(striker_id),
         'nonStrikerID':       nonstriker_id,
+        'nonStrikerName':     name_map.get(nonstriker_id),
         'bowlerID':           bowler_id,
+        'bowlerName':         name_map.get(bowler_id),
     })
 
 
@@ -1216,6 +1360,82 @@ def save_match_state(conn, match_id, innings, striker_id, nonstriker_id, bowler_
             nonStrikerID=excluded.nonStrikerID,
             bowlerID=excluded.bowlerID
     ''', (match_id, innings, striker_id, nonstriker_id, bowler_id))
+
+
+def _batting_slot(conn, match_id, innings):
+    """Return 1 or 2 - whether the team batting in this innings is team1 or team2.
+    Mirrors the toss logic used by /api/balls/state so the scoreboard totals are
+    stored against the correct team name (not just innings1->team1)."""
+    match = conn.execute(
+        'SELECT team1Name, team2Name, tossWinnerName, tossDecision FROM Matches WHERE matchID=?',
+        (match_id,)).fetchone()
+    if not match:
+        return 1 if innings == 1 else 2
+    team1 = match['team1Name']
+    team2 = match['team2Name']
+    toss_winner = match['tossWinnerName']
+    decision = (match['tossDecision'] or '').strip().lower()
+    other = team2 if toss_winner == team1 else team1
+    if decision in ('bat', 'batting'):
+        inn1_bat = toss_winner
+    elif decision in ('bowl', 'bowling', 'field', 'fielding'):
+        inn1_bat = other
+    else:
+        inn1_bat = team1
+    batting_team = inn1_bat if innings == 1 else (team2 if inn1_bat == team1 else team1)
+    return 1 if batting_team == team1 else 2
+
+
+def _recalc_match_totals(conn, match_id, innings):
+    """Recompute innings runs/wickets and store them against the team that
+    actually batted this innings. Returns (runs, wickets)."""
+    row = conn.execute('''
+        SELECT COALESCE(SUM(runsScored+extras),0) AS r,
+               COALESCE(SUM(wicketFallen),0)       AS w
+        FROM BallByBall WHERE matchID=? AND inningsNumber=?
+    ''', (match_id, innings)).fetchone()
+    slot = _batting_slot(conn, match_id, innings)
+    if slot == 1:
+        conn.execute('UPDATE Matches SET team1TotalRuns=?, team1TotalWickets=? WHERE matchID=?',
+                     (row['r'], row['w'], match_id))
+    else:
+        conn.execute('UPDATE Matches SET team2TotalRuns=?, team2TotalWickets=? WHERE matchID=?',
+                     (row['r'], row['w'], match_id))
+    return row['r'], row['w']
+
+
+def _has_other_available_bowler(conn, match_id, innings, match_format, current_bowler):
+    """True if a bowler OTHER than current_bowler still has overs available.
+    Used to bypass the consecutive-over rule when only one bowler remains."""
+    slot = _batting_slot(conn, match_id, innings)   # slot of the BATTING team
+    match = conn.execute('SELECT team1Name, team2Name FROM Matches WHERE matchID=?',
+                         (match_id,)).fetchone()
+    if not match:
+        return True
+    bowling_team = match['team2Name'] if slot == 1 else match['team1Name']
+    cands = conn.execute('''
+        SELECT p.playerID FROM PlayingXI px JOIN Players p ON px.playerID = p.playerID
+        WHERE px.matchID=? AND px.teamName=?
+          AND (p.playerRole IN ('Bowler','AllRounder')
+               OR (p.bowlingStyle IS NOT NULL AND TRIM(LOWER(p.bowlingStyle)) NOT IN ('', 'none')))
+    ''', (match_id, bowling_team)).fetchall()
+    if not cands:
+        return True   # can't determine the bowling XI -> enforce the rule strictly
+    max_overs = MAX_OVERS_PER_BOWLER.get(match_format)
+    for c in cands:
+        pid = c['playerID']
+        if pid == current_bowler:
+            continue
+        if max_overs is None:
+            return True
+        legal = conn.execute('''
+            SELECT SUM(CASE WHEN (extraType IS NULL OR extraType NOT IN ('Wide','NoBall','Retired'))
+                            THEN 1 ELSE 0 END) AS lb
+            FROM BallByBall WHERE matchID=? AND inningsNumber=? AND bowlerID=?
+        ''', (match_id, innings, pid)).fetchone()['lb'] or 0
+        if (legal // 6) < max_overs:
+            return True
+    return False
 
 
 @app.route('/api/balls/state/<int:match_id>', methods=['PUT'])
@@ -1247,7 +1467,10 @@ def enforce_bowler_rules(conn, match_id, innings, match_format, over, ball, bowl
         ORDER BY ballID DESC LIMIT 1
     ''', (match_id, innings, over - 1)).fetchone()
     if prev_over_row and prev_over_row['bowlerID'] == bowler:
-        return 'The same bowler cannot bowl two consecutive overs'
+        # Bypass the consecutive-over rule if this bowler is the only one
+        # with overs remaining (per the documented business rule).
+        if _has_other_available_bowler(conn, match_id, innings, match_format, bowler):
+            return 'The same bowler cannot bowl two consecutive overs'
 
     max_overs = MAX_OVERS_PER_BOWLER.get(match_format)
     if max_overs is not None:
@@ -1308,28 +1531,19 @@ def add_ball():
                   batsman, bowler, runs, extras, extra_type,
                   wicket, dismissed, wicket_type, fielder))
 
-            # Persist current innings context so it auto-restores on reload
+            # Persist current innings context so it auto-restores on reload.
+            # If the client didn't send a non-striker, keep the one already stored
+            # instead of wiping it to NULL every ball.
+            if nonstriker is None:
+                prev = conn.execute(
+                    'SELECT nonStrikerID FROM MatchState WHERE matchID=? AND inningsNumber=?',
+                    (match_id, innings)).fetchone()
+                if prev and prev['nonStrikerID']:
+                    nonstriker = prev['nonStrikerID']
             save_match_state(conn, match_id, innings, batsman, nonstriker, bowler)
 
-            # ── update match score totals ─────────────────────
-            total_runs = conn.execute('''
-                SELECT COALESCE(SUM(runsScored+extras),0) AS r
-                FROM BallByBall WHERE matchID=? AND inningsNumber=?
-            ''', (match_id, innings)).fetchone()['r']
-
-            total_wkts = conn.execute('''
-                SELECT COALESCE(SUM(wicketFallen),0) AS w
-                FROM BallByBall WHERE matchID=? AND inningsNumber=?
-            ''', (match_id, innings)).fetchone()['w']
-
-            if innings == 1:
-                conn.execute('''
-                    UPDATE Matches SET team1TotalRuns=?, team1TotalWickets=? WHERE matchID=?
-                ''', (total_runs, total_wkts, match_id))
-            else:
-                conn.execute('''
-                    UPDATE Matches SET team2TotalRuns=?, team2TotalWickets=? WHERE matchID=?
-                ''', (total_runs, total_wkts, match_id))
+            # ── update match score totals (attributed to the batting team) ──
+            total_runs, total_wkts = _recalc_match_totals(conn, match_id, innings)
 
         return jsonify({'message': 'Ball recorded', 'totalRuns': total_runs, 'wickets': total_wkts}), 201
 
@@ -1373,25 +1587,8 @@ def update_ball(ball_id):
             ''', (batsman, bowler, runs, extras, extra_type,
                   wicket, dismissed, wicket_type, fielder, ball_id))
 
-            # ── update match score totals ─────────────────────
-            total_runs = conn.execute('''
-                SELECT COALESCE(SUM(runsScored+extras),0) AS r
-                FROM BallByBall WHERE matchID=? AND inningsNumber=?
-            ''', (match_id, innings)).fetchone()['r']
-
-            total_wkts = conn.execute('''
-                SELECT COALESCE(SUM(wicketFallen),0) AS w
-                FROM BallByBall WHERE matchID=? AND inningsNumber=?
-            ''', (match_id, innings)).fetchone()['w']
-
-            if innings == 1:
-                conn.execute('''
-                    UPDATE Matches SET team1TotalRuns=?, team1TotalWickets=? WHERE matchID=?
-                ''', (total_runs, total_wkts, match_id))
-            else:
-                conn.execute('''
-                    UPDATE Matches SET team2TotalRuns=?, team2TotalWickets=? WHERE matchID=?
-                ''', (total_runs, total_wkts, match_id))
+            # ── update match score totals (attributed to the batting team) ──
+            total_runs, total_wkts = _recalc_match_totals(conn, match_id, innings)
 
         return jsonify({'message': 'Ball updated', 'totalRuns': total_runs, 'wickets': total_wkts}), 200
 
@@ -1412,17 +1609,7 @@ def delete_ball(ball_id):
             # recalc totals
             match_id = row['matchID']
             innings  = row['inningsNumber']
-            r = conn.execute('''
-                SELECT COALESCE(SUM(runsScored+extras),0) AS r,
-                       COALESCE(SUM(wicketFallen),0)       AS w
-                FROM BallByBall WHERE matchID=? AND inningsNumber=?
-            ''', (match_id, innings)).fetchone()
-            if innings == 1:
-                conn.execute('UPDATE Matches SET team1TotalRuns=?, team1TotalWickets=? WHERE matchID=?',
-                             (r['r'], r['w'], match_id))
-            else:
-                conn.execute('UPDATE Matches SET team2TotalRuns=?, team2TotalWickets=? WHERE matchID=?',
-                             (r['r'], r['w'], match_id))
+            _recalc_match_totals(conn, match_id, innings)
         return jsonify({'message': 'Ball deleted'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
