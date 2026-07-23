@@ -42,12 +42,12 @@
 ├── rankings.html           # Team + player rankings
 ├── stats.html              # AI stats query
 │
-├── style.css               # Global styles (~2214 lines)
+├── style.css               # Global styles (~2309 lines)
 ├── cricket_anim.css        # Animations
 ├── transitions.js          # View transitions + scroll behavior + DataSync
 ├── auth.js                 # Shared auth helpers (authFetch, getUser)
 ├── logic.js                # Dashboard logic (overview, leaderboards, AI insight)
-├── matches.js              # Match list, scorecard, live scoring (~1594 lines)
+├── matches.js              # Match list, scorecard, live scoring (~1859 lines)
 ├── players.js              # Player cards, search, hero images (~430 lines)
 ├── teams.js                # Team list, roster, featured player
 ├── tournaments.js          # Tournament CRUD, standings
@@ -172,11 +172,55 @@ User taps numpad → lsRecordRun(n) / lsOpenExtraModal() / lsOpenWicketModal()
         → Backend: INSERT INTO BallByBall + save_match_state()
         → Backend: update match totals (team1TotalRuns etc.)
     → Frontend: local state update (scoreboard, timeline, batters)
-    → Frontend: lsRefreshStats() → GET /api/stats/scorecard → update live batting/bowling card tabs
+    → If wicket: add to beDismissedIDs, set pendingNewBatter=true, openContextModal('wicket')
+    → Frontend: lsRefreshStats() → GET /api/stats/scorecard
+        → renderBatTable('ls-bat-body', allBat, allXI, { activeIds, pendingWicket, excludeFromPick })
+        → renderBowlTable('ls-bowl-body', allBowl)
     → Frontend: DataSync.dataChanged('ball-recorded') → broadcast to other tabs
 ```
 
-## 6. Data Flow — Cross-Page Sync
+## 6. Batting Scorecard Rendering
+
+```
+renderBatTable(tbId, rows, xiRows, opts):
+    1. Sort batted rows by XI position (xiPos map from xiRows)
+    2. Compute battedIDs set
+    3. Compute activeNotBatted = activeIds - battedIDs (B update: new striker without row)
+    4. yetToBat = xiRows - battedIDs - activeNotBatted (in XI order)
+    5. Render batted rows → sc-out / sc-notout with formatDismissal()
+       - If pendingWicket: insert picker row after last dismissed batter
+    6. Render activeNotBatted → synthetic sc-notout "playing" row
+    7. Render yetToBat → sc-dnb dimmed rows
+```
+
+## 7. Wicket Flow — New Batter Selection
+
+```
+lsSubmitBall(isWicket=true):
+    → local beDismissedIDs.push(dismissedPlayer)
+    → POST /api/balls → fetch state
+    → swap striker if odd runs/over-end
+    → pendingNewBatter = true
+    → openContextModal('wicket')
+        → filterContextPlayers('wicket'):
+            → newBatterOpts excludes: dismissed (out), any player at crease not out (both striker + non-striker)
+    → User selects → confirmContext():
+        → currentStriker = selectedPlayerID
+        → pendingNewBatter = false
+        → lsRefreshStats() → renderBatTable picks up activeIds
+```
+
+## 8. WK Fielder Tagging
+
+```
+lsOpenWicketModal():
+    → Populate fielder dropdown from bowling team players
+    → Designated WK gets data-wk attribute + "(WK)" label
+lsOnWicketTypeChange():
+    → If Stumped: auto-select option[data-wk]
+```
+
+## 9. Data Flow — Cross-Page Sync
 
 ```
 Tab A records ball → DataSync.dataChanged('ball-recorded')
@@ -185,6 +229,6 @@ Tab A records ball → DataSync.dataChanged('ball-recorded')
     → Tab B listener fires → loadMatches() / loadTeams() / etc.
 ```
 
-## 7. View Transitions API
+## 10. View Transitions API
 
 All 7 pages include `<meta name="view-transition" content="same-origin">`. Navigation uses `document.startViewTransition()` wrapped in `transitions.js` for animated page switches.

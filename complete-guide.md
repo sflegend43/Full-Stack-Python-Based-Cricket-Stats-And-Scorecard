@@ -13,6 +13,11 @@ Everything about this project: every file, every function, every endpoint, every
 6. [Frontend — JavaScript Files](#6-frontend-javascript-files)
 7. [Frontend — CSS (style.css)](#7-frontend-css)
 8. [Data Files](#8-data-files)
+9. [Users & Roles](#9-users--roles)
+10. [Business Rules](#10-business-rules)
+11. [Design System](#11-design-system)
+12. [Key Decisions & Known Issues](#12-key-decisions--known-issues)
+13. [Running the App](#13-running-the-app)
 
 ---
 
@@ -42,7 +47,7 @@ A full-stack Python/Flask cricket statistics and live scorekeeping platform. Two
 | `index.html` | 173 | Dashboard with stats overview |
 | `stats.html` | 134 | AI stats query page |
 | `login.html` | 57 | Auth page |
-| `matches.js` | 1594 | Match list, scorecard, live scoring logic |
+| `matches.js` | 1859 | Match list, scorecard, live scoring logic |
 | `players.js` | 431 | Player cards, search, add/edit forms |
 | `teams.js` | 364 | Team list, roster, featured players |
 | `tournaments.js` | 413 | Tournament CRUD, squad wizard, standings |
@@ -50,7 +55,7 @@ A full-stack Python/Flask cricket statistics and live scorekeeping platform. Two
 | `logic.js` | ~300 | Dashboard: overview, leaderboards, AI insight |
 | `transitions.js` | ~200 | View transitions, scroll behavior, DataSync |
 | `auth.js` | ~80 | Login/signup form handling |
-| `style.css` | 2214 | All styles: 28 major sections |
+| `style.css` | 2309 | All styles: 28 major sections |
 | `cricket_anim.css` | ~27 | Cricket animations |
 | `Players Pics/` | 96 files | 95 player PNGs + 1 SVG placeholder |
 | `dummy.png` | 1 | Fallback player image |
@@ -393,19 +398,19 @@ Returns error string or `None`. Checks: (1) consecutive overs, (2) max overs per
   - **Players Performance** → 2 sub-sub-tabs (1st/2nd Innings Bowling) — batting lives on main tabs
   - **Ball Log** → same as before (over-by-over visual + detailed table)
 
-**C. Live Scoring View** (lines 247–362, hidden by default)
+**C. Live Scoring View** (hidden by default)
 - Toolbar: "Back to Scorecard", match title, LIVE badge
 - Two-column grid:
   - LEFT: Score head (team badges, score, overs, CRR), Over timeline (6 dots), Batters (striker/non-striker with swap), Bowler (name, OV/M/R/W)
   - RIGHT: Numpad (runs 0–6, extras WD/NB/BYE/LB/PEN/Retire, OUT/UNDO)
+  - Below: Live scoring card tabs (Batting/Bowling) with broadcast-style scorecard
 
 **5 Modals:**
-1. Context Modal (line 219): Striker/Non-Striker/Bowler selection
-2. Context Modal #2 (line 616): Duplicate for innings start
-3. Extras Modal (line 366): Extra run selection (+0 to +6)
-4. Wicket Modal (line 387): Dismissed player, type, fielder, optional extra
-5. Retire Modal (line 446): Batter selection, reason
-6. Add Match Wizard (line 473): 3-step (Details → Toss → Playing XI)
+1. Context Modal: Striker/Non-Striker/Bowler selection (mode: innings_start, wicket, new_over, manual_swap)
+2. Extras Modal: Extra run selection (+0 to +6)
+3. Wicket Modal: Dismissed player, type (12 types), fielder (with WK tagging), optional extra
+4. Retire Modal: Batter selection, reason
+5. Add Match Wizard: 3-step (Details → Toss → Playing XI)
 
 ### 5.4 players.html (203 lines)
 - Search bar + Team dropdown + Role filter (All/Batsman/Bowler/AllRounder/WicketKeeper)
@@ -452,7 +457,7 @@ Handles login/signup form submissions. Stores user object + token in `localStora
 | `loadCompletedTournaments()` | — | Fetches tournaments, renders completed ones |
 | `refreshAIInsight()` | — | Fetches `/api/stats/ai-insight`, updates pill text |
 
-### 6.3 matches.js (1594 lines) — Largest File
+### 6.3 matches.js (1859 lines) — Largest File
 
 **Global Variables:**
 | Variable | Purpose |
@@ -464,15 +469,18 @@ Handles login/signup form submissions. Stores user object + token in `localStora
 | `beInnings` | Current innings (1 or 2) |
 | `bePlayers` | Players for current match/innings |
 | `currentStriker/NonStriker/Bowler` | Active crease context |
-| `beDismissedIDs` | Array of dismissed player IDs |
-| `beBowlerOvers` | Bowler over counts |
-| `beMaxOversPerBowler` | Max overs limit |
+| `beDismissedIDs` | Array of dismissed player IDs (merged server + local) |
+| `beBowlerOvers` | Bowler over counts (legal balls per player) |
+| `beMaxOversPerBowler` | Max overs limit by format |
 | `beLastOverBowlerID` | Previous over's bowler |
-| `pendingNewBatter` | Flag: new batter required |
+| `pendingNewBatter` | Flag: new batter required (blocks ball entry) |
 | `lsCurrentOver/Ball` | Current ball position |
 | `lsExtraType/lsExtraRuns` | Extra being entered |
-| `contextMode` | Context modal mode |
+| `contextMode` | Context modal mode (innings_start/wicket/new_over/manual_swap) |
 | `wicketAtEndOver` | Wicket fell at over end |
+| `beInnings` | Current innings (1 or 2) |
+| `beRuns` | Current pending runs |
+| `beDelType` | Current delivery type
 
 **Key Functions:**
 
@@ -488,39 +496,47 @@ Handles login/signup form submissions. Stores user object + token in `localStora
 | `viewScorecard()` | 164 | Load + show scorecard |
 | `backToList()` | 184 | Return to match list |
 | `renderScorecard()` | 190 | Build full scorecard, calls `pickBattingXI()` |
-| `renderBatTable()` | 225 | Broadcast-style batting card (out/not-out/dnb rows) |
-| `renderBowlTable()` | 274 | Bowling stats table |
-| `renderXIBoxes()` | 295 | Playing XI display |
-| `switchInnings()` | 372 | Main tab switching (6 tabs) |
-| `switchDetailTab()` | 392 | Detailed Stats sub-tab switching (Players Performance / Ball Log) |
-| `switchPerfTab()` | 410 | Players Performance sub-sub-tab switching (bowling only) |
-| `undoLastBall()` | 353 | Delete last ball |
-| `deleteMatch()` | 399 | Delete match with confirm |
-| `populateSelectDropdowns()` | 409 | Fill match wizard dropdowns |
-| `openAddMatchModal()` | 438 | Show match wizard |
-| `handleMatchWizard()` | 643 | Submit new match + XI |
-| `openBallEntry()` | 738 | Enter live scoring mode |
-| `closeLiveScoring()` | 795 | Return to scorecard |
-| `filterContextPlayers()` | 839 | Populate context dropdowns with eligible players |
-| `openContextModal()` | 908 | Show striker/bowler selection |
-| `cancelContextModal()` | 950 | Cancel with enforcement |
-| `confirmContext()` | 959 | Apply context selection |
-| `persistContext()` | 992 | Save context to server |
-| `manualSwapStriker()` | 1008 | Swap striker/non-striker |
-| `updateScoreboardStrip()` | 1016 | Update score display |
-| `lsRefreshStats()` | 1031 | Refresh batter/bowler stats |
-| `updateTimeline()` | 1074 | Render current over dots |
-| `lsRecordRun()` | 1127 | Record runs (0–6) |
-| `lsOpenExtraModal()` | 1136 | Open extras dialog |
-| `lsConfirmExtra()` | 1164 | Submit extras |
-| `lsOpenWicketModal()` | 1171 | Open wicket dialog |
-| `lsConfirmWicket()` | 1208 | Submit wicket |
-| `lsSubmitBall()` | 1218 | **Core function**: validate, POST ball, handle wicket, advance ball, swap strikes, persist, broadcast |
-| `loadBallLog()` | 1338 | Fetch + render ball log |
-| `renderBallLogViz()` | 1356 | Over-by-over colored chips |
-| `renderBallLogTable()` | 1394 | Detailed ball log table |
-| `playCrowdSound()` | 1518 | Web Audio API crowd noise |
-| `customConfirm()` | 1570 | Promise-based confirm modal |
+| `renderBatTable()` | 244 | Broadcast-style batting card (sc-out/sc-notout/sc-dnb + formatDismissal) |
+| `renderBatTableClassic()` | 397 | Old-style batting table for Detailed Stats sub-sub-tabs |
+| `buildPickerRow()` | — | Inline new-batter picker after last dismissed row |
+| `renderBowlTable()` | — | Bowling stats table |
+| `renderXIBoxes()` | — | Playing XI display |
+| `switchInnings()` | — | Main tab switching (6 tabs) |
+| `switchDetailTab()` | — | Detailed Stats sub-tab switching (Players Performance / Ball Log) |
+| `switchPerfTab()` | — | Players Performance sub-sub-tab switching (1st/2nd Bat old-style + 1st/2nd Bowl) |
+| `formatDismissal()` | 227 | Composes c {f} b {b}, st {f} b {b}, run out ({f}), etc. |
+| `pickBattingXI()` | 208 | Infers batting team XI by matching batsmanIDs |
+| `undoLastBall()` | — | Delete last ball |
+| `deleteMatch()` | — | Delete match with confirm |
+| `populateSelectDropdowns()` | — | Fill match wizard dropdowns |
+| `openAddMatchModal()` | — | Show match wizard |
+| `handleMatchWizard()` | — | Submit new match + XI |
+| `openBallEntry()` | — | Enter live scoring mode |
+| `closeLiveScoring()` | — | Return to scorecard |
+| `filterContextPlayers()` | 1037 | Populate context dropdowns — newBatterOpts excludes both striker+non-striker at crease |
+| `openContextModal()` | 1106 | Show striker/bowler selection |
+| `cancelContextModal()` | 1148 | Cancel with enforcement toast |
+| `confirmContext()` | 1157 | Apply context selection |
+| `persistContext()` | 1190 | Save context to server |
+| `manualSwapStriker()` | 1206 | Swap striker/non-striker |
+| `updateScoreboardStrip()` | 1214 | Update score display |
+| `lsRefreshStats()` | 1229 | Refresh batter/bowler stats — calls renderBatTable+renderBowlTable with activeIds |
+| `lsSwitchScorecardTab()` | 1301 | Switch live card (bat/bowl) |
+| `lsPickNewBatter()` | — | Sets striker, clears pendingNewBatter, calls lsRefreshStats |
+| `lsOpenWicketModal()` | — | WK fielder tagging with data-wk attribute |
+| `lsOnWicketTypeChange()` | — | Auto-select WK for Stumped |
+| `updateTimeline()` | — | Render current over dots |
+| `lsRecordRun()` | — | Record runs (0–6) |
+| `lsOpenExtraModal()` | — | Open extras dialog |
+| `lsConfirmExtra()` | — | Submit extras |
+| `lsOpenWicketModal()` | — | Open wicket dialog |
+| `lsConfirmWicket()` | — | Submit wicket |
+| `lsSubmitBall()` | 1483 | **Core function**: validate, POST ball, handle wicket, advance ball, swap strikes, persist, broadcast |
+| `loadBallLog()` | — | Fetch + render ball log |
+| `renderBallLogViz()` | — | Over-by-over colored chips |
+| `renderBallLogTable()` | — | Detailed ball log table |
+| `playCrowdSound()` | — | Web Audio API crowd noise |
+| `customConfirm()` | — | Promise-based confirm modal |
 
 ### 6.4 players.js (431 lines)
 
@@ -631,6 +647,7 @@ Handles login/signup form submissions. Stores user object + token in `localStora
 | 2093–2142 | **Scroll-to-Top** | Fixed bottom-right, 44px, blur bg, visibility toggle |
 | 2144–2156 | **Nav Auto-Hide** | `translateY(-105%)` on scroll down |
 | 2158–2214 | **Team Roster** | Grid 240px + 1fr, featured player hero (280px), scrollable list |
+| 2228–2309 | **Broadcast Scorecard** | `.sc-bat-row`, `.sc-out` (gold+pink strikethrough), `.sc-notout` (mint-green bar), `.sc-dnb` (dimmed), `.sc-name` (1.05rem), `.sc-dismissal` (0.88rem muted), `.sc-num` (1.15rem Orbitron bold), `.sc-table thead th` (0.88rem), `.sc-picker-row`, `.sc-picker-select` |
 
 ---
 
@@ -650,3 +667,247 @@ Handles login/signup form submissions. Stores user object + token in `localStora
 - `dummy.png`: Root-level fallback for missing player images
 - `stadium_bg.png`: Background overlay for all pages
 - `batsman.png`: Cricket animation asset
+
+---
+
+## 9. Users & Roles
+
+| Role | Capabilities |
+|------|-------------|
+| **Admin** | Full CRUD: create/manage teams, players, tournaments, matches; enter ball-by-ball live scoring; delete data |
+| **Fan (default)** | Read-only: browse dashboards, view scorecards, view player/team stats, view leaderboards |
+
+Authentication uses email + password with Bearer token. Signup stores password with Werkzeug hashing. Admin signup requires a shared admin key (`CRICKET_ADMIN_2026`).
+
+## 10. Business Rules
+
+### 10.1 Bowler Rules
+
+| Format | Max Overs |
+|--------|-----------|
+| T10 | 2 |
+| T20 | 4 |
+| ODI | 10 |
+| TEST | Unlimited (null) |
+
+- A bowler **cannot bowl two consecutive overs**. If only one bowler has overs remaining, the rule is bypassed.
+- Checked server-side in `enforce_bowler_rules()` before every ball insert
+- Checked client-side before showing bowler selection
+- Bowlers filtered by: `playerRole IN ('Bowler','AllRounder') OR (bowlingStyle IS NOT NULL AND TRIM(LOWER(bowlingStyle)) NOT IN ('', 'none'))`
+
+### 10.2 Wicket Rules
+
+**Dismissal Types:** `Bowled`, `Caught`, `CaughtAndBowled`, `LBW`, `RunOut`, `Stumped`, `HitWicket`, `ObstructingField`, `HandledBall`, `TimedOut`, `HitTwice`
+
+**New Batter Enforcement:**
+- After a wicket: `pendingNewBatter` flag set to `true`
+- All ball entry blocked until a new batter is selected
+- Context modal re-opens automatically on cancel
+- On page reload: if restored striker is in `beDismissedIDs`, modal re-opens
+- Cancel clears the striker and shows an enforcement toast
+
+**Retire:** `RetiredHurt` = batter leaves temporarily; `RetiredOut` = counts as wicket
+
+### 10.3 Extra Rules
+
+| Type | Runs off bat | Ball counts |
+|------|-------------|-------------|
+| Wide (WD) | 0+ | No |
+| NoBall (NB) | 0+ | No |
+| Bye (BYE) | 0+ | Yes |
+| LegBye (LB) | 0+ | Yes |
+| Penalty (PEN) | Always 5 | Yes |
+
+Wide and NoBall do NOT count as a legal delivery. Bye, LegBye, and Penalty DO count.
+
+### 10.4 Batting Order Rules (Scorecard)
+
+- **Batted players**: sorted by XI position (batting arrival order), position never changes once set
+- **Active-but-not-batted**: new striker just selected (no row yet) — synthetic "playing" row inserted right after last batted row (B update)
+- **Yet-to-bat**: XI players in strict XI position order (not role-sorted)
+- **New batter picker**: excludes dismissed players (out) AND any player currently at crease not dismissed (both striker and non-striker)
+
+### 10.5 Auth Rules
+
+- `admin`: Full access (requires admin key at signup)
+- `fan` (default): Read-only access
+- Admin-only actions: POST/PUT/DELETE on Players, Teams, Venues, Umpires, Matches, Tournaments; ball entry; deleting balls; match wizard
+- Admin UI stripping: `document.querySelectorAll('.admin-only').forEach(el => el.remove())` for non-admin users
+
+### 10.6 Bowling Figures Calculation
+
+```sql
+-- Excludes Wide/NoBall/Retired from legal deliveries
+SUM(CASE WHEN (extraType IS NULL OR extraType NOT IN ('Wide','NoBall','Retired'))
+         THEN 1 ELSE 0 END) AS ballsBowled
+-- runsConceded includes ALL runs (bat runs + extras + penalties)
+-- maidens: over where wicketFallen=0, runsScored=0, extras=0 OR IS NULL for all 6 balls
+```
+
+## 11. Design System
+
+### 11.1 Theme
+Dark UI throughout. Deep matte backgrounds with high-contrast accent colors.
+
+### 11.2 Color Tokens
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--bg` | `#0f0f1a` | Page background |
+| `--card-bg` | `rgba(15,20,40,0.65)` | Glass card backgrounds |
+| `--text` | `#e2e8f0` | Primary text |
+| `--text-muted` | `#64748b` | Secondary/muted text |
+| `--primary` | `#38bdf8` | Primary accent (sky blue) |
+| `--gold` | `#f59e0b` | Gold accents |
+| `--gold-bright` | `#fbbf24` | Bright gold |
+| `--neon-green` | `#22c55e` | Success, runs, wins |
+| `--red-ball` | `#ef4444` | Danger, wickets |
+
+### 11.3 Typography
+
+| Font | Weight | Usage |
+|------|--------|-------|
+| **Poppins** | 300–800 | Body text, UI elements, badges |
+| **Orbitron** | 400–900 | Headings, scores, stat numbers |
+
+### 11.4 Components
+
+**Glass Card:**
+```css
+background: rgba(15,20,40,0.65);
+border: 1px solid rgba(255,255,255,0.06);
+border-radius: 16px;
+backdrop-filter: blur(20px);
+```
+
+**Badges:** `.badge-batsman` (blue), `.badge-bowler` (red), `.badge-allrounder` (gold), `.badge-keeper` (green), `.badge-t20` (cyan), `.badge-odi` (purple), `.badge-test` (orange), `.badge-t10` (pink)
+
+**Buttons:** `.btn-submit` (gradient blue), `.btn-cancel` (red), `.btn-view` (green), `.btn-delete` (red), `.filter-btn` (tab toggle)
+
+### 11.5 Ball Entry Layout
+
+**Two-column grid** (`.be-grid`): `1fr 1fr` collapse to `1fr` at 900px.
+
+| Component | Content |
+|-----------|---------|
+| Score Head | Team badges, main score, CRR |
+| Over Timeline | 6 circular indicators |
+| Batters | Striker + non-striker with runs/balls |
+| Bowler | Name, OV/M/R/W stats |
+
+**Numpad (right):** Runs 0–6, Extras (WD/NB/BYE/LB/PEN/Retire), Actions (OUT/UNDO)
+
+### 11.6 Scorecard Tabs
+
+**6 Main Tabs:** 1st Innings Batting, 1st Innings Bowling (placeholder), 2nd Innings Batting, 2nd Innings Bowling (placeholder), Playing XI, Detailed Stats
+
+**Broadcast Batting Table (7 columns):** `Batsman | Dismissal | Runs | Balls | 4s | 6s | SR`
+
+| Row state | CSS class | Visual |
+|-----------|-----------|--------|
+| Out | `sc-out` | Gold name + pink strikethrough, white runs |
+| Not out | `sc-notout` | Full mint-green `#b9f6ca` bar, dark text |
+| Yet to bat | `sc-dnb` | Dimmed name (0.6 opacity), dash stats |
+
+**Scorecard text sizes:**
+| Element | Size | Font |
+|---------|------|------|
+| Table headers | 0.88rem | Poppins |
+| Player name | 1.05rem | Poppins bold |
+| Dismissal/status | 0.88rem | Poppins |
+| Numbers | 1.15rem | Orbitron bold |
+| Card heading | 1.25rem | Orbitron |
+
+**Detailed Stats (2 sub-tabs):**
+- **Players Performance** → 4 sub-sub-tabs: 1st/2nd Innings Batting (old-style), 1st/2nd Innings Bowling
+- **Ball Log** → over-by-over visual + detailed table
+
+### 11.7 Live Scoring Card Tabs
+
+Below ball entry, centered tab bar (`ls-sc-tab-bat`/`ls-sc-tab-bowl`) switches between panels.
+
+- **Batting card**: uses `renderBatTable()` with `activeIds` + `pendingWicket` opts; same broadcast-style as main tabs
+- **Bowling card**: 6 columns (Bowler, O, M, R, W, Econ); active bowler highlighted
+
+### 11.8 WK Fielder Tagging
+
+- Fielder dropdown populated from bowling team players
+- Designated WK (`playerRole === 'WicketKeeper'`) gets `data-wk` attribute + `(WK)` label
+- Auto-selects WK when Stumped chosen via `lsOnWicketTypeChange()`
+
+### 11.9 Dismissal Format (formatDismissal)
+
+| Scenario | Output |
+|----------|--------|
+| Caught | `c {fielder} b {bowler}` |
+| Caught & Bowled | `c & b {bowler}` |
+| Bowled | `b {bowler}` |
+| LBW | `lbw b {bowler}` |
+| Stumped | `st {fielder} b {bowler}` |
+| Run Out | `run out ({fielder})` |
+| Hit Wicket | `hit wicket b {bowler}` |
+| No dismissal | `not out` |
+
+### 11.10 Animations & Navigation
+
+- **View Transitions**: all pages `<meta name="view-transition" content="same-origin">` + `document.startViewTransition()`
+- **Two-tier header**: Row 1 (logo + AI pill + welcome/logout), Row 2 (7 centered nav links)
+- **Auto-hide**: `.nav-hidden` on scroll down past 60px, show on scroll up
+- **Scroll-to-top**: fixed bottom-right, teal hover glow, `requestAnimationFrame`
+- **Toast notifications**: `.flash` class, auto-remove after 3.5s
+
+### 11.11 Responsive Breakpoints
+
+| Breakpoint | Behavior |
+|-----------|----------|
+| > 900px | Full two-column layout |
+| ≤ 900px | Ball entry grid collapses to single column |
+| ≤ 700px | Team roster grid collapses, nav adjusts |
+
+## 12. Key Decisions & Known Issues
+
+### 12.1 Backend Decisions
+
+- **SQLite with WAL**: Simple, no external DB server needed
+- **`get_db()` per request**: Fresh connection per request, auto-commits via `with`
+- **`requires_admin` decorator**: Wraps routes to check `user['isAdmin']`
+- **`enforce_bowler_rules()`**: Server-side validation for consecutive overs + max overs per format
+- **`save_match_state()`**: Persists striker/non-striker/bowler to `MatchState` after every ball
+
+### 12.2 Frontend Decisions
+
+- **No framework**: Vanilla JS with `fetch`/`authFetch`. All rendering via `innerHTML` templates
+- **`authFetch()`**: Wrapper adding `Authorization: Bearer <token>`
+- **`window.DataSync`**: BroadcastChannel with localStorage fallback for cross-tab sync
+- **`pendingNewBatter` block**: Local flag prevents ball entry until new batter selected after wicket
+
+### 12.3 Known Issues / Tech Debt
+
+**Critical:**
+1. **`seed_data.py` missing venues/umpires**: `/api/seed` endpoint will crash on first run
+2. **No CSRF protection**: Token-based auth via localStorage, no CSRF tokens
+
+**Moderate:**
+3. **`lsRefreshStats` uses plain `fetch`**: No auth header, relies on `?_t=` cache-busting
+4. **`dummy.png` and `player-placeholder.svg`**: Two different fallback systems for player images
+
+**Low:**
+5. **Inline styles**: Many components use extensive inline styles rather than CSS classes
+6. **No password hashing migration**: Older accounts may have plaintext passwords (new ones use Werkzeug hashing)
+
+## 13. Running the App
+
+```bash
+python app.py
+```
+
+Server: `http://localhost:5001`
+Navigate to: `http://localhost:5001/login.html`
+
+### Database Reset
+
+```bash
+python reset_db.py
+python app.py
+# Then hit /api/seed (note: will fail on venues/umpires due to seed_data bug)
+```

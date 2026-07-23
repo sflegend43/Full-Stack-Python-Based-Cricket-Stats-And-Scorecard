@@ -59,10 +59,14 @@ Working full-stack cricket stats app with live ball-by-ball scoring, running on 
 
 ### Features Added
 - Live scoring card tabs (Batting/Bowling) below ball entry
-- Scorecard tab restructure: 6 main tabs (1st/2nd Innings Bat/Bowl, Playing XI, Detailed Stats); batting on main tabs with broadcast-style `sc-*` classes (`sc-out`, `sc-notout`, `sc-dnb`); Detailed Stats has Players Performance (bowling only) + Ball Log; `pickBattingXI()` + `renderBatTable(tbId, rows, xiRows)` rewrite
+- Scorecard tab restructure: 6 main tabs (1st/2nd Innings Bat/Bowl, Playing XI, Detailed Stats); batting on main tabs with broadcast-style `sc-*` classes (`sc-out`, `sc-notout`, `sc-dnb`); Detailed Stats has Players Performance (2 sub-sub bowling tabs) + Ball Log; `pickBattingXI()` + `renderBatTable(tbId, rows, xiRows, opts)` rewrite
 - `beDismissedIDs` local tracking with server merge
 - `pendingNewBatter` flag system
 - `cancelContextModal()` with enforcement toast
+- Broadcast batting card: 7 columns, 3 row states, `formatDismissal()` helper (`c {f} b {b}`, `st {f} b {b}`, `run out ({f})`, etc.)
+- **Batting order enforcement**: batted→XI order, active-but-not-batted→after batted, yet-to-bat→XI order (not role)
+- **WK fielder tagging**: `(WK)` tag via `data-wk` attribute; auto-selects WK on Stumped
+- **New batter picker**: checks both `currentStriker` and `currentNonStriker` for players at crease not dismissed
 
 ## Running the App
 ```

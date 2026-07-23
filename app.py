@@ -257,6 +257,12 @@ def init_db():
             pass # column already exists
 
         try:
+            # live | innings_break | super_over | completed
+            conn.execute("ALTER TABLE Matches ADD COLUMN matchStatus TEXT DEFAULT 'live'")
+        except sqlite3.OperationalError:
+            pass # column already exists
+
+        try:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS MatchState (
                     matchID       INTEGER NOT NULL,
@@ -968,7 +974,17 @@ def scorecard(match_id):
                        SUM(CASE WHEN b.runsScored=4 THEN 1 ELSE 0 END) AS fours,
                        SUM(CASE WHEN b.runsScored=6 THEN 1 ELSE 0 END) AS sixes,
                        MAX(CASE WHEN b.dismissedPlayerID=b.batsmanID
-                           THEN b.wicketType ELSE NULL END) AS dismissal
+                           THEN b.wicketType ELSE NULL END) AS dismissal,
+                       (SELECT p2.playerName FROM BallByBall b2
+                        JOIN Players p2 ON b2.bowlerID = p2.playerID
+                        WHERE b2.matchID=b.matchID AND b2.inningsNumber=b.inningsNumber
+                              AND b2.dismissedPlayerID=b.batsmanID AND b2.wicketType != 'RunOut'
+                        ORDER BY b2.rowid DESC LIMIT 1) AS bowlerName,
+                       (SELECT p3.playerName FROM BallByBall b3
+                        JOIN Players p3 ON b3.fielderID = p3.playerID
+                        WHERE b3.matchID=b.matchID AND b3.inningsNumber=b.inningsNumber
+                              AND b3.dismissedPlayerID=b.batsmanID
+                        ORDER BY b3.rowid DESC LIMIT 1) AS fielderName
                 FROM BallByBall b
                 JOIN Players p ON b.batsmanID = p.playerID
                 WHERE b.matchID=? AND b.inningsNumber=?
@@ -1010,6 +1026,7 @@ def scorecard(match_id):
                 JOIN Players p ON xi.playerID = p.playerID
                 JOIN Squad s ON p.playerID = s.playerID
                 WHERE xi.matchID=? AND s.teamName=?
+                ORDER BY xi.rowid
             ''', (match_id, team_name)).fetchall()
 
     return jsonify({
@@ -1138,6 +1155,193 @@ def get_balls(match_id):
 
 MAX_OVERS_PER_BOWLER = {'T10': 2, 'T20': 4, 'ODI': 10, 'TEST': None}
 
+# Total overs bowled in ONE innings, per format. TEST has no over cap.
+INNINGS_OVERS = {'T10': 10, 'T20': 20, 'ODI': 50, 'TEST': None}
+
+# ICC Super Over limits (per side)
+SUPER_OVER_BALLS   = 6    # one over
+SUPER_OVER_WICKETS = 2    # side is "all out" on the 2nd wicket
+
+# Wickets that end an innings ("all out") for the two innings-pairs
+ALL_OUT_WICKETS = 10
+
+
+# ─────────────────────────────────────────────────────
+# Innings / result evaluation (ICC rules)
+# ─────────────────────────────────────────────────────
+def _teams_for_innings(conn, match_id, innings):
+    """Return (battingTeam, bowlingTeam) for any innings 1-4.
+    Innings 1/2 follow the toss. The Super Over (3/4) follows the ICC rule
+    that the team which batted SECOND in the match bats FIRST in the Super Over."""
+    m = conn.execute(
+        'SELECT team1Name, team2Name, tossWinnerName, tossDecision FROM Matches WHERE matchID=?',
+        (match_id,)).fetchone()
+    if not m:
+        return (None, None)
+    t1, t2 = m['team1Name'], m['team2Name']
+    tw = m['tossWinnerName']
+    dec = (m['tossDecision'] or '').strip().lower()
+    other = t2 if tw == t1 else t1
+    if dec in ('bat', 'batting'):
+        inn1_bat = tw
+    elif dec in ('bowl', 'bowling', 'field', 'fielding'):
+        inn1_bat = other
+    else:
+        inn1_bat = t1
+    inn1_bowl = t2 if inn1_bat == t1 else t1
+    # innings 1 & 4 -> team that batted first in the match; 2 & 3 -> the other side
+    if innings in (1, 4):
+        return (inn1_bat, inn1_bowl)
+    return (inn1_bowl, inn1_bat)
+
+
+def _innings_runs_wkts(conn, match_id, innings):
+    """(runs, wickets, legalBalls) for one innings, straight from BallByBall."""
+    row = conn.execute('''
+        SELECT COALESCE(SUM(runsScored + extras), 0) AS r,
+               COALESCE(SUM(wicketFallen), 0)        AS w,
+               COALESCE(SUM(CASE WHEN (extraType IS NULL OR extraType NOT IN ('Wide','NoBall','Retired'))
+                                 THEN 1 ELSE 0 END), 0) AS legal
+        FROM BallByBall WHERE matchID=? AND inningsNumber=?
+    ''', (match_id, innings)).fetchone()
+    return int(row['r']), int(row['w']), int(row['legal'])
+
+
+def _wickets_word(n):
+    return '1 wicket' if n == 1 else f'{n} wickets'
+
+
+def _runs_word(n):
+    return '1 run' if n == 1 else f'{n} runs'
+
+
+def evaluate_progress(conn, match_id, innings):
+    """Evaluate innings-completion and the match result under ICC rules.
+
+    Returns a dict the front-end uses to drive the target banner, the
+    "innings complete -> start next" flow, the win/loss declaration, and the
+    Super Over. Handles limited-overs formats only; TEST is skipped."""
+    m = conn.execute('SELECT * FROM Matches WHERE matchID=?', (match_id,)).fetchone()
+    if not m:
+        return {}
+    fmt = m['matchFormat']
+    overs_limit = INNINGS_OVERS.get(fmt)
+
+    out = {
+        'format':           fmt,
+        'oversLimit':       overs_limit,
+        'isLimitedOvers':   overs_limit is not None,
+        'innings':          innings,
+        'isSuperOver':      innings >= 3,
+        'runs':             0,
+        'wickets':          0,
+        'legalBalls':       0,
+        'ballsLimit':       None,
+        'ballsRemaining':   None,
+        'wicketsRemaining': None,
+        'target':           None,
+        'runsNeeded':       None,
+        'inningsComplete':  False,
+        'matchComplete':    False,
+        'isTie':            False,
+        'winnerName':       m['winnerName'],
+        'winMargin':        m['winMargin'],
+        'resultText':       None,
+        'phase':            'live',      # live | innings_break | super_over_pending | super_over_break | complete | test
+        'nextInnings':      None,
+        'battingTeam':      None,
+        'bowlingTeam':      None,
+    }
+
+    if overs_limit is None:            # TEST — no auto innings/target/super-over
+        out['phase'] = 'test'
+        out['matchComplete'] = bool(m['winnerName'])
+        return out
+
+    is_super  = innings >= 3
+    balls_limit = SUPER_OVER_BALLS if is_super else overs_limit * 6
+    wkts_limit  = SUPER_OVER_WICKETS if is_super else ALL_OUT_WICKETS
+    first_inn = 3 if is_super else 1
+    second_inn = 4 if is_super else 2
+
+    bat, bowl = _teams_for_innings(conn, match_id, innings)
+    out['battingTeam'], out['bowlingTeam'] = bat, bowl
+
+    r, w, legal = _innings_runs_wkts(conn, match_id, innings)
+    out['runs'], out['wickets'], out['legalBalls'] = r, w, legal
+    out['ballsLimit'] = balls_limit
+    out['ballsRemaining'] = max(0, balls_limit - legal)
+    out['wicketsRemaining'] = max(0, wkts_limit - w)
+
+    overs_done = legal >= balls_limit
+    all_out    = w >= wkts_limit
+
+    if innings == first_inn:
+        # First innings of the pair: just check whether it is over.
+        if overs_done or all_out:
+            out['inningsComplete'] = True
+            out['phase'] = 'super_over_break' if is_super else 'innings_break'
+            out['nextInnings'] = second_inn
+        return out
+
+    # ── Chasing innings (2nd of the pair) ──
+    first_runs, _fw, _fl = _innings_runs_wkts(conn, match_id, first_inn)
+    target = first_runs + 1
+    out['target'] = target
+    out['runsNeeded'] = max(0, target - r)
+
+    if r >= target:
+        # Target overtaken -> chasing side wins by wickets in hand.
+        out['inningsComplete'] = True
+        out['matchComplete'] = True
+        out['winnerName'] = bat
+        wih = wkts_limit - w
+        out['winMargin'] = 'Super Over' if is_super else _wickets_word(wih)
+        out['resultText'] = (f'{bat} won the Super Over' if is_super
+                             else f'{bat} won by {_wickets_word(wih)}')
+        out['phase'] = 'complete'
+    elif overs_done or all_out:
+        out['inningsComplete'] = True
+        if r == first_runs:
+            # Scores level.
+            out['isTie'] = True
+            if is_super:
+                # Super Over tied -> ICC calls for another Super Over.
+                out['phase'] = 'super_over_pending'
+                out['resultText'] = 'Super Over tied — another Super Over required'
+            else:
+                out['phase'] = 'super_over_pending'
+                out['resultText'] = 'Match tied — Super Over required'
+        else:
+            # Fell short -> team batting first wins by runs.
+            out['matchComplete'] = True
+            out['winnerName'] = bowl          # bowling side batted first this pair
+            diff = first_runs - r
+            out['winMargin'] = 'Super Over' if is_super else _runs_word(diff)
+            out['resultText'] = (f'{bowl} won the Super Over' if is_super
+                                 else f'{bowl} won by {_runs_word(diff)}')
+            out['phase'] = 'complete'
+    return out
+
+
+def _persist_match_result(conn, match_id, prog):
+    """Write the computed status/result back to the Matches row."""
+    status_map = {
+        'live':               'live',
+        'innings_break':      'innings_break',
+        'super_over_break':   'super_over',
+        'super_over_pending': 'super_over',
+        'complete':           'completed',
+        'test':               'live',
+    }
+    status = status_map.get(prog.get('phase'), 'live')
+    if prog.get('matchComplete'):
+        conn.execute(
+            'UPDATE Matches SET winnerName=?, winMargin=?, matchStatus=? WHERE matchID=?',
+            (prog.get('winnerName'), prog.get('winMargin'), 'completed', match_id))
+    else:
+        conn.execute('UPDATE Matches SET matchStatus=? WHERE matchID=?', (status, match_id))
+
 
 @app.route('/api/balls/state/<int:match_id>', methods=['GET'])
 def get_ball_state(match_id):
@@ -1175,6 +1379,9 @@ def get_ball_state(match_id):
         ''', (match_id,)).fetchall()
 
         match = conn.execute('SELECT * FROM Matches WHERE matchID=?', (match_id,)).fetchone()
+
+        # Innings/target/result status under ICC rules (drives the live banner)
+        progress = evaluate_progress(conn, match_id, innings) if match else {}
 
         # Batsmen already dismissed or retired this innings (excluded from new-batter picks)
         dismissed_rows = conn.execute('''
@@ -1347,6 +1554,8 @@ def get_ball_state(match_id):
         'nonStrikerName':     name_map.get(nonstriker_id),
         'bowlerID':           bowler_id,
         'bowlerName':         name_map.get(bowler_id),
+        'progress':           progress,
+        'matchStatus':        (dict(match).get('matchStatus') if match else None),
     })
 
 
@@ -1388,12 +1597,16 @@ def _batting_slot(conn, match_id, innings):
 
 def _recalc_match_totals(conn, match_id, innings):
     """Recompute innings runs/wickets and store them against the team that
-    actually batted this innings. Returns (runs, wickets)."""
+    actually batted this innings. Returns (runs, wickets).
+    Super Over innings (3 & 4) are NOT written to the main team totals — a
+    Super Over does not change the tied scores of innings 1 & 2."""
     row = conn.execute('''
         SELECT COALESCE(SUM(runsScored+extras),0) AS r,
                COALESCE(SUM(wicketFallen),0)       AS w
         FROM BallByBall WHERE matchID=? AND inningsNumber=?
     ''', (match_id, innings)).fetchone()
+    if innings >= 3:
+        return row['r'], row['w']
     slot = _batting_slot(conn, match_id, innings)
     if slot == 1:
         conn.execute('UPDATE Matches SET team1TotalRuns=?, team1TotalWickets=? WHERE matchID=?',
@@ -1513,9 +1726,23 @@ def add_ball():
 
     try:
         with get_db() as conn:
-            match_row = conn.execute('SELECT matchFormat FROM Matches WHERE matchID=?', (match_id,)).fetchone()
+            match_row = conn.execute(
+                'SELECT matchFormat, matchStatus, winnerName FROM Matches WHERE matchID=?',
+                (match_id,)).fetchone()
             if not match_row:
                 return jsonify({'error': 'Match not found'}), 404
+
+            # ── ICC guard: reject deliveries once the innings/match is decided ──
+            pre = evaluate_progress(conn, match_id, innings)
+            if match_row['winnerName'] and (match_row['matchStatus'] or '') == 'completed':
+                return jsonify({'error': 'Match already completed'}), 400
+            if pre.get('matchComplete'):
+                return jsonify({'error': 'Match already completed'}), 400
+            if pre.get('inningsComplete'):
+                msg = ('The Super Over innings is already complete'
+                       if innings >= 3 else 'This innings is already complete '
+                       '(overs finished or all out)')
+                return jsonify({'error': msg}), 400
 
             rule_error = enforce_bowler_rules(conn, match_id, innings, match_row['matchFormat'], over, ball, bowler)
             if rule_error:
@@ -1545,7 +1772,12 @@ def add_ball():
             # ── update match score totals (attributed to the batting team) ──
             total_runs, total_wkts = _recalc_match_totals(conn, match_id, innings)
 
-        return jsonify({'message': 'Ball recorded', 'totalRuns': total_runs, 'wickets': total_wkts}), 201
+            # ── evaluate innings completion / target / result (ICC rules) ──
+            prog = evaluate_progress(conn, match_id, innings)
+            _persist_match_result(conn, match_id, prog)
+
+        return jsonify({'message': 'Ball recorded', 'totalRuns': total_runs,
+                        'wickets': total_wkts, 'progress': prog}), 201
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

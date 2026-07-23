@@ -131,32 +131,72 @@ Imported via Google Fonts: `fonts.googleapis.com/css2?family=Poppins:wght@300;40
 - **Ball Log** → over-by-over visual + detailed table
 
 ### Broadcast Scorecard CSS (`sc-*` classes)
-- `.sc-bat-row td`: tight padding `0.7rem 1rem`
-- `.sc-name`: bold uppercase, broadcast style
-- `.sc-dismissal`: muted 0.78rem, nowrap
-- `.sc-num`: right-aligned, Orbitron tabular-nums
-- `sc-out`: gold name + pink strikethrough, white runs, gold fours, red sixes, muted SR
-- `sc-notout`: full mint-green `#b9f6ca` row, dark text, bold "NOT OUT" dismissal
-- `sc-dnb`: dimmed name (0.8 opacity), dash stats (0.35 opacity), no hover
+- `.sc-bat-row td`: padding `0.85rem 1rem`, tighter
+- `.sc-name`: bold uppercase, 1.05rem broadcast style
+- `.sc-dismissal`: muted 0.88rem, nowrap
+- `.sc-num`: right-aligned, 1.15rem Orbitron tabular-nums bold
+- `.sc-table thead th`: font-size 0.88rem
+- `sc-out`: gold name + pink line-through strikethrough, white runs, gold fours, red sixes, muted SR
+- `sc-notout`: full mint-green `#b9f6ca` row, dark text, "not out" dismissal (lowercase)
+- `sc-dnb`: dimmed name (0.6 opacity), dash stats (0.35 opacity), no hover
+
+### Row Rendering Logic
+1. **Batted (XI order)**: all players with batting rows, sorted by XI position
+2. **Active-but-not-batted**: new striker just selected (no row yet), synthetic "playing" row right after last batted
+3. **Yet-to-bat (XI order)**: remaining XI players, dimmed dnb rows
+
+### Dismissal Format (formatDismissal)
+| Scenario | Output |
+|----------|--------|
+| Caught | `c {fielder} b {bowler}` |
+| Caught & Bowled | `c & b {bowler}` |
+| Bowled | `b {bowler}` |
+| LBW | `lbw b {bowler}` |
+| Stumped | `st {fielder} b {bowler}` |
+| Run Out | `run out ({fielder})` |
+| Hit Wicket | `hit wicket b {bowler}` |
+| No dismissal | `not out` |
+
+### Playing XI Boxes (renderXIBoxes)
+- Two columns: Team 1 left, Team 2 right
+- Player rows with role badge, matchRole (C / WK / C & WK)
+- Role-priority sort: Batsman (1) → WicketKeeper (2) → AllRounder (3) → Bowler (4)
 
 ## 7. Live Scoring Card Tabs
 
 Below ball entry, centered tab bar switches between Batting and Bowling cards.
 
-### Batting Card Design
-- 5 columns: `Batter (2.5fr) | Fielder (1.2fr) | Info (1.2fr) | R (0.8fr) | B (0.8fr)`
-- **Out row**: White name + magenta strikethrough, muted grey dismissal, green runs, pink balls
-- **Active row**: Solid white background, all text black
-- **DNB row**: White name, stats hidden
+### Batting Card Design (broadcast-style, same as main scorecard)
+- 7 columns: `Batsman | Dismissal | Runs | Balls | 4s | 6s | SR`
+- Same `sc-out` / `sc-notout` / `sc-dnb` classes as main tabs
+- Uses `renderBatTable()` with `opts.activeIds` + `opts.pendingWicket`
+- On wicket: picker row renders inline after last out batter
 
 ### Bowling Card Design
 - 6 columns: `Bowler | O | M | R | W | Econ`
 - Active bowler row highlighted
 
+### WK Fielder Tagging
+- Fielder dropdown populated from bowling team players
+- Designated WK (`playerRole === 'WicketKeeper'`) gets `data-wk` attribute + `(WK)` label
+- Auto-selects WK when Stumped chosen via `lsOnWicketTypeChange()`
+
 ## 7. Match Scorecard (Full)
 
 ### Bowling Table Headers
 `Name | O | M | R | W | Econ | Dots | 4s | 6s`
+
+### Scorecard Text Sizes
+| Element | Size | Font |
+|---------|------|------|
+| Table headers | 0.88rem | Poppins |
+| Player name | 1.05rem | Poppins bold |
+| Dismissal/status | 0.88rem | Poppins |
+| Numbers | 1.15rem | Orbitron bold |
+| Card heading | 1.25rem | Orbitron |
+| Main tabs | 0.92rem | Poppins |
+| Sub-tabs | 0.85rem | Poppins |
+| Cell padding | 0.85rem | — |
 
 ### Extra Type Labels
 Format: `totalRunsWD`, `totalRunsNB`, `totalRunsBY`, `totalRunsLB`, `5PEN` (no parentheses)

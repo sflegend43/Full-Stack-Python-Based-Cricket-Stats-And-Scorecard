@@ -37,6 +37,7 @@ let currentStriker = null;
 let currentNonStriker = null;
 let currentBowler = null;
 let contextMode = '';
+let beProgress = null;      // latest ICC innings/target/result status from the server
 
 // ── Helpers ─────────────────────────────────────────────
 function getUser() {
@@ -168,6 +169,12 @@ async function viewScorecard(matchId) {
         if (res.ok) {
             currentScorecard = data;
             beMatchId = matchId;
+            // Reset live-scoring state so opening a different match never carries
+            // over a stale innings/context from a previously scored match.
+            beInnings = 1;
+            currentStriker = currentNonStriker = currentBowler = null;
+            pendingNewBatter = false;
+            beProgress = null;
             renderScorecard(data);
             document.getElementById('list-view').style.display     = 'none';
             document.getElementById('scorecard-view').style.display = 'block';
@@ -224,31 +231,84 @@ function renderScorecard(data) {
     switchInnings('inn1');
 }
 
-function renderBatTable(tbId, rows, xiRows) {
+function formatDismissal(row) {
+    const t = (row.dismissal || '').trim();
+    if (!t) return 'not out';
+    const b = row.bowlerName, f = row.fielderName;
+    switch (t) {
+        case 'Caught':          return f ? `c ${f} b ${b}` : (b ? `b ${b}` : t);
+        case 'CaughtAndBowled': return b ? `c & b ${b}` : t;
+        case 'Bowled':          return b ? `b ${b}` : t;
+        case 'LBW':             return b ? `lbw b ${b}` : t;
+        case 'Stumped':         return f ? `st ${f} b ${b}` : (b ? `b ${b}` : t);
+        case 'RunOut':          return f ? `run out (${f})` : 'run out';
+        case 'HitWicket':       return b ? `hit wicket b ${b}` : t;
+        case 'RetiredOut':      return 'retired out';
+        default:                return t;
+    }
+}
+
+function renderBatTable(tbId, rows, xiRows, opts) {
     const tb = document.getElementById(tbId);
     if (!tb) return;
     rows = rows || [];
     xiRows = xiRows || [];
+    opts = opts || {};
 
-    // Players from the batting XI who have not yet come to the crease.
+    const activeIds    = opts.activeIds    || null;   // Set of IDs currently at crease
+    const pendingWk    = opts.pendingWicket || false;  // show picker after last dismissed batter
+    const excludeFromPick = opts.excludeFromPick || null; // Set of IDs to hide from picker
+
+    // Sort batted players by XI position (batting order)
+    const xiPos = new Map();
+    xiRows.forEach((p, i) => xiPos.set(String(p.playerID), i));
+    const sortedRows = [...rows].sort((a, b) =>
+        (xiPos.get(String(a.batsmanID)) ?? 9999) - (xiPos.get(String(b.batsmanID)) ?? 9999)
+    );
+
+    // Batted IDs
     const battedIDs = new Set(rows.map(r => String(r.batsmanID)));
+
+    // Active-but-not-batted: players at crease not yet in batted rows (new batter just selected)
+    // These get a synthetic row placed right after the last batted row (B update)
+    const activeNotBatted = new Set();
+    if (activeIds) {
+        activeIds.forEach(id => {
+            if (!battedIDs.has(id)) activeNotBatted.add(id);
+        });
+    }
+
+    // Yet-to-bat: XI players not in batted set and not active-but-not-batted, sorted by role order
+    // top order → middle order → allrounder → bowler
     const roleOrder = { 'Batsman': 1, 'WicketKeeper': 2, 'AllRounder': 3, 'Bowler': 4 };
     const yetToBat = xiRows
-        .filter(p => !battedIDs.has(String(p.playerID)))
+        .filter(p => !battedIDs.has(String(p.playerID)) && !activeNotBatted.has(String(p.playerID)))
         .sort((a, b) => (roleOrder[a.playerRole] || 99) - (roleOrder[b.playerRole] || 99));
 
-    if (!rows.length && !yetToBat.length) {
+    if (!sortedRows.length && !activeNotBatted.size && !yetToBat.length) {
         tb.innerHTML = `<tr><td colspan="7" class="empty-state">No batting data.</td></tr>`;
         return;
     }
 
-    // A batter is "out" when a dismissal string exists; otherwise "not out".
-    const battedHTML = rows.map(r => {
+    // Build the picker options (available = yet-to-bat minus excluded)
+    const pickerAvail = yetToBat.filter(p => !excludeFromPick || !excludeFromPick.has(String(p.playerID)));
+
+    // ── Render batted rows (XI-ordered) ──
+    let pickerInserted = false;
+    const battedHTML = sortedRows.map((r, idx) => {
         const sr = r.balls ? ((r.runs / r.balls) * 100).toFixed(1) : '0.0';
         const isOut = !!(r.dismissal && String(r.dismissal).trim());
+        const isActive = activeIds && activeIds.has(String(r.batsmanID));
+        let status;
+        if (isOut) {
+            status = formatDismissal(r);
+        } else if (isActive) {
+            status = 'playing';
+        } else {
+            status = formatDismissal(r);
+        }
         const rowCls = isOut ? 'sc-bat-row sc-out' : 'sc-bat-row sc-notout';
-        const status = isOut ? r.dismissal : 'not out';
-        return `<tr class="${rowCls}">
+        let html = `<tr class="${rowCls}">
             <td class="sc-name">${r.playerName}</td>
             <td class="sc-dismissal">${status}</td>
             <td class="sc-num sc-runs">${r.runs}</td>
@@ -257,8 +317,36 @@ function renderBatTable(tbId, rows, xiRows) {
             <td class="sc-num sc-sixes">${r.sixes}</td>
             <td class="sc-num sc-sr">${sr}</td>
         </tr>`;
+        // Insert picker row right after the last dismissed batter
+        if (pendingWk && isOut && !pickerInserted) {
+            const isLastDismissed = !sortedRows.slice(idx + 1).some(r2 =>
+                !!(r2.dismissal && String(r2.dismissal).trim())
+            );
+            if (isLastDismissed) {
+                pickerInserted = true;
+                html += buildPickerRow(pickerAvail);
+            }
+        }
+        return html;
     }).join('');
 
+    // ── Render active-but-not-batted rows (B update: new batter inserted right after batted) ──
+    let newBatHTML = '';
+    activeNotBatted.forEach(id => {
+        const p = xiRows.find(x => String(x.playerID) === id);
+        if (!p) return;
+        newBatHTML += `<tr class="sc-bat-row sc-notout">
+            <td class="sc-name">${p.playerName}</td>
+            <td class="sc-dismissal">playing</td>
+            <td class="sc-num sc-runs">0</td>
+            <td class="sc-num">0</td>
+            <td class="sc-num sc-fours">0</td>
+            <td class="sc-num sc-sixes">0</td>
+            <td class="sc-num sc-sr">0.0</td>
+        </tr>`;
+    });
+
+    // ── Render yet-to-bat rows (role-sorted) ──
     const dnbHTML = yetToBat.map(p => `
         <tr class="sc-bat-row sc-dnb">
             <td class="sc-name">${p.playerName}</td>
@@ -270,7 +358,29 @@ function renderBatTable(tbId, rows, xiRows) {
             <td class="sc-num">–</td>
         </tr>`).join('');
 
-    tb.innerHTML = battedHTML + dnbHTML;
+    // If no dismissed batter found but picker still needed (edge case), append at top
+    if (pendingWk && !pickerInserted && pickerAvail.length) {
+        var pickerTopHTML = buildPickerRow(pickerAvail);
+    }
+
+    // Final display order: batted → new active (B) → yet-to-bat
+    tb.innerHTML = (pickerTopHTML || '') + battedHTML + newBatHTML + dnbHTML;
+}
+
+function buildPickerRow(players) {
+    if (!players || !players.length) return '';
+    const opts = players.map(p =>
+        `<option value="${p.playerID}">${p.playerName}</option>`
+    ).join('');
+    return `<tr class="sc-bat-row sc-picker-row">
+        <td class="sc-picker-cell" colspan="7">
+            <span class="sc-picker-label">⚡ New batter:</span>
+            <select class="sc-picker-select" onchange="lsPickNewBatter(this.value)">
+                <option value="">— select —</option>
+                ${opts}
+            </select>
+        </td>
+    </tr>`;
 }
 
 function renderBowlTable(tbId, rows) {
@@ -310,7 +420,7 @@ function renderBatTableClassic(tbId, rows) {
             <td style="color:var(--gold-bright);">⚡${r.fours}</td>
             <td style="color:var(--red-ball-light);">💥${r.sixes}</td>
             <td style="color:var(--text-muted);">${sr}</td>
-            <td style="color:var(--text-muted); font-size:0.78rem;">${r.dismissal || '—'}</td>
+            <td style="color:var(--text-muted); font-size:0.78rem;">${formatDismissal(r)}</td>
         </tr>`;
     }).join('');
 }
@@ -406,9 +516,10 @@ function switchInnings(tab) {
     if (el)    el.style.display = (tab === 'details') ? 'block' : 'block';
     if (tabEl) tabEl.classList.add('active');
 
-    // When Detailed Stats is opened, default to Players Performance > 1st Innings Bowling
+    // When Detailed Stats is opened, default to Players Performance > 1st Innings Batting
     if (tab === 'details') {
         switchDetailTab('perf');
+        switchPerfTab('inn1');
     }
 }
 
@@ -832,42 +943,90 @@ let beMaxOversPerBowler = null;
 let beLastOverBowlerID = null;
 let currentBowlingTeam = null;
 
+async function fetchBallState(innings) {
+    const res = await authFetch(`${API}/api/balls/state/${beMatchId}?innings=${innings}`);
+    return res.json();
+}
+
 async function openBallEntry() {
     if (!beMatchId) { showToast('Open a scorecard first.', 'error'); return; }
 
+    // Reveal the live scoring view up-front so status overlays render correctly.
+    document.getElementById('live-scoring-view').style.display = 'flex';
+    document.getElementById('list-view').style.display = 'none';
+    document.getElementById('scorecard-view').style.display = 'none';
+    hideLsStatus();
+
     try {
-        const res  = await authFetch(`${API}/api/balls/state/${beMatchId}?innings=${beInnings}`);
-        const data = await res.json();
+        // Always resolve the active innings FROM SCRATCH (starting at innings 1)
+        // so a stale beInnings left over from a previous match can never skip
+        // straight into the 2nd innings / super over.
+        let inn = 1;
+        let data = await fetchBallState(inn);
 
-        bePlayers = data.players || [];
-        beDismissedIDs = data.dismissedPlayerIDs || [];
-        beBowlerOvers = data.bowlerOvers || {};
-        beMaxOversPerBowler = data.maxOversPerBowler;
-        beLastOverBowlerID = data.lastOverBowlerID || null;
-        populateBallDropdowns();
-        
-        lsCurrentOver = data.nextOver || 1;
-        lsCurrentBall = data.nextBall || 1;
+        // If the match is already decided (incl. a finished super over), show the
+        // final result immediately instead of trying to resume an innings.
+        const mm = data.match || {};
+        if ((data.matchStatus === 'completed' || mm.matchStatus === 'completed') && mm.winnerName) {
+            beInnings = inn;
+            applyBallState(data);
+            const rt = mm.winMargin === 'Super Over'
+                ? `${shortTeam(mm.winnerName)} won the Super Over`
+                : `${shortTeam(mm.winnerName)} won${mm.winMargin ? ' by ' + mm.winMargin : ''}`;
+            renderProgressBanner({ isLimitedOvers: true, matchComplete: true, resultText: rt });
+            setScoringEnabled(false);
+            showLsStatus('🏆', 'Match Complete', rt, [
+                { label: '📊 View Scorecard', onclick: () => { hideLsStatus(); closeLiveScoring(); } }
+            ]);
+            document.getElementById('ls-teams-title').textContent = `Match #${beMatchId} • Result`;
+            return;
+        }
 
-        if (data.battingTeam) currentBattingTeam = data.battingTeam;
-        if (data.bowlingTeam) currentBowlingTeam = data.bowlingTeam;
+        // Advance to the innings that is genuinely in progress. A normal innings
+        // break always advances to the next innings (so it can be started). A tie
+        // (super_over_pending) only advances once the super over has actually
+        // begun — otherwise we stop and show the "Start Super Over" prompt.
+        let guard = 0;
+        while (guard < 4) {
+            const pr = data.progress;
+            if (!pr || !pr.inningsComplete || pr.matchComplete) break;
 
-        // Restore the persisted crease context (so batters/bowler auto-appear on reload)
-        currentStriker   = data.strikerID   || null;
-        currentNonStriker = data.nonStrikerID || null;
-        currentBowler    = data.bowlerID    || null;
-        // If the restored striker was dismissed, force new batter selection
-        pendingNewBatter = currentStriker && beDismissedIDs.includes(currentStriker);
-        if (pendingNewBatter) currentStriker = null;
-        populateBallDropdowns();
+            let next = pr.nextInnings;
+            const isTie = pr.phase === 'super_over_pending';
+            if (isTie) next = 3;
+            if (!next) break;
 
-        updateScoreboardStrip(data.totalRuns, data.wickets, lsCurrentOver, lsCurrentBall);
+            const nextData = await fetchBallState(next);
+            const nextStarted = (nextData.legalBalls || 0) > 0
+                || (nextData.totalRuns || 0) > 0
+                || (nextData.wickets || 0) > 0;
+            // For a tie, don't auto-jump into an un-started super over.
+            if (isTie && !nextStarted) break;
 
-        const battingLabel = document.getElementById('ls-batting-team');
-        const bowlingLabel = document.getElementById('ls-bowling-team');
-        if (battingLabel) battingLabel.textContent = `🏏 ${shortTeam(currentBattingTeam).toUpperCase()} BATTING`;
-        if (bowlingLabel) bowlingLabel.textContent = `🎯 ${shortTeam(currentBowlingTeam).toUpperCase()} BOWLING`;
+            inn = next;
+            data = nextData;
+            guard++;
+        }
 
+        beInnings = inn;
+        applyBallState(data);
+        beProgress = data.progress || null;
+        renderProgressBanner(beProgress);
+
+        // Match already decided -> lock scoring and show the result.
+        if (beProgress && beProgress.matchComplete) {
+            setScoringEnabled(false);
+            handleInningsEnd(beProgress);
+            return;
+        }
+        // Tie awaiting a super over.
+        if (beProgress && beProgress.phase === 'super_over_pending') {
+            setScoringEnabled(false);
+            handleInningsEnd(beProgress);
+            return;
+        }
+
+        setScoringEnabled(true);
         // Only prompt for openers when we have no persisted context at all
         if (!currentStriker || !currentBowler) {
             openContextModal('innings_start');
@@ -877,16 +1036,162 @@ async function openBallEntry() {
 
         lsRefreshStats();
         updateTimeline();
-    } catch {
+    } catch (e) {
         bePlayers = [];
         populateBallDropdowns();
     }
 
-    document.getElementById('live-scoring-view').style.display = 'flex';
-    document.getElementById('list-view').style.display = 'none';
-    document.getElementById('scorecard-view').style.display = 'none';
-    
-    document.getElementById('ls-teams-title').textContent = `Match #${beMatchId} • Innings ${beInnings}`;
+    const soLabel = beInnings >= 3 ? ` • Super Over` : '';
+    const innTxt  = beInnings >= 3 ? `Super Over Inns ${beInnings - 2}` : `Innings ${beInnings}`;
+    document.getElementById('ls-teams-title').textContent = `Match #${beMatchId} • ${innTxt}`;
+}
+
+// Apply a /api/balls/state payload to the live-scoring UI state.
+function applyBallState(data) {
+    bePlayers = data.players || [];
+    beDismissedIDs = data.dismissedPlayerIDs || [];
+    beBowlerOvers = data.bowlerOvers || {};
+    beMaxOversPerBowler = data.maxOversPerBowler;
+    beLastOverBowlerID = data.lastOverBowlerID || null;
+
+    lsCurrentOver = data.nextOver || 1;
+    lsCurrentBall = data.nextBall || 1;
+
+    if (data.battingTeam) currentBattingTeam = data.battingTeam;
+    if (data.bowlingTeam) currentBowlingTeam = data.bowlingTeam;
+
+    currentStriker    = data.strikerID    || null;
+    currentNonStriker = data.nonStrikerID || null;
+    currentBowler     = data.bowlerID     || null;
+    pendingNewBatter  = currentStriker && beDismissedIDs.includes(currentStriker);
+    if (pendingNewBatter) currentStriker = null;
+    populateBallDropdowns();
+
+    updateScoreboardStrip(data.totalRuns, data.wickets, lsCurrentOver, lsCurrentBall);
+
+    const battingLabel = document.getElementById('ls-batting-team');
+    const bowlingLabel = document.getElementById('ls-bowling-team');
+    if (battingLabel) battingLabel.textContent = `🏏 ${shortTeam(currentBattingTeam).toUpperCase()} BATTING`;
+    if (bowlingLabel) bowlingLabel.textContent = `🎯 ${shortTeam(currentBowlingTeam).toUpperCase()} BOWLING`;
+}
+
+// ── Innings / target / result UI ─────────────────────────────────────
+function renderProgressBanner(prog) {
+    const el = document.getElementById('ls-target-banner');
+    if (!el) return;
+    if (!prog || !prog.isLimitedOvers) { el.style.display = 'none'; return; }
+
+    if (prog.matchComplete && prog.resultText) {
+        el.className = 'ls-target-banner result';
+        el.innerHTML = `<span class="ls-tb-result">🏆 ${prog.resultText}</span>`;
+        el.style.display = 'flex';
+        return;
+    }
+    if (prog.target != null) {
+        const batName = shortTeam(prog.battingTeam || currentBattingTeam || '');
+        const so = prog.isSuperOver ? 'SUPER OVER • ' : '';
+        const ballWord = prog.ballsRemaining === 1 ? 'ball' : 'balls';
+        el.className = 'ls-target-banner';
+        el.innerHTML =
+            `<span class="ls-tb-target">${so}TARGET ${prog.target}</span>` +
+            `<span class="ls-tb-need"><b>${batName}</b> need <b>${prog.runsNeeded}</b> from <b>${prog.ballsRemaining}</b> ${ballWord}</span>`;
+        el.style.display = 'flex';
+        return;
+    }
+    if (prog.isSuperOver) {
+        el.className = 'ls-target-banner super';
+        el.innerHTML = `<span class="ls-tb-target">⚡ SUPER OVER — Innings ${prog.innings - 2}</span>`;
+        el.style.display = 'flex';
+        return;
+    }
+    el.style.display = 'none';
+}
+
+function showLsStatus(emoji, title, msg, actions) {
+    const o = document.getElementById('ls-status-overlay');
+    if (!o) return;
+    document.getElementById('ls-status-emoji').textContent = emoji;
+    document.getElementById('ls-status-title').textContent = title;
+    document.getElementById('ls-status-msg').innerHTML = msg;
+    const act = document.getElementById('ls-status-actions');
+    act.innerHTML = '';
+    (actions || []).forEach(a => {
+        const b = document.createElement('button');
+        b.className = 'btn-submit ' + (a.cls || '');
+        b.style.margin = '0 0.4rem';
+        b.textContent = a.label;
+        b.onclick = a.onclick;
+        act.appendChild(b);
+    });
+    o.style.display = 'flex';
+}
+function hideLsStatus() {
+    const o = document.getElementById('ls-status-overlay');
+    if (o) o.style.display = 'none';
+}
+
+function setScoringEnabled(on) {
+    const pad = document.querySelector('#live-scoring-view .be-numpad');
+    if (pad) {
+        pad.style.opacity = on ? '1' : '0.4';
+        pad.style.pointerEvents = on ? 'auto' : 'none';
+    }
+}
+
+function handleInningsEnd(prog) {
+    lsRefreshStats();
+    renderProgressBanner(prog);
+    setScoringEnabled(false);
+
+    if (prog.matchComplete) {
+        try { playCrowdSound('boundary'); } catch (e) {}
+        showLsStatus('🏆', 'Match Complete', prog.resultText || 'Match complete.', [
+            { label: '📊 View Scorecard', onclick: () => { hideLsStatus(); closeLiveScoring(); } }
+        ]);
+        if (window.DataSync && DataSync.matchCompleted) DataSync.matchCompleted(beMatchId);
+        return;
+    }
+
+    if (prog.phase === 'super_over_pending') {
+        if (prog.isSuperOver) {
+            // One super over is supported by the schema; a tied super over is rare.
+            showLsStatus('🤝', 'Super Over Tied', prog.resultText || 'The Super Over was tied.', [
+                { label: '📊 View Scorecard', onclick: () => { hideLsStatus(); closeLiveScoring(); } }
+            ]);
+        } else {
+            showLsStatus('🤝', 'Match Tied!',
+                `Scores are level at <b>${prog.runs}</b>. Time for a Super Over — ` +
+                `the side that batted second bats first.`, [
+                { label: '⚡ Start Super Over', onclick: startSuperOver }
+            ]);
+        }
+        return;
+    }
+
+    // innings_break or super_over_break -> start the next innings
+    const nextInn = prog.nextInnings || (beInnings + 1);
+    const isSO = prog.isSuperOver;
+    const title = isSO ? 'Super Over — 1st Innings Done' : 'Innings Complete';
+    const btn   = isSO ? '⚡ Bowl Super Over Chase' : '▶ Start 2nd Innings';
+    showLsStatus('🏏', title,
+        `${shortTeam(prog.battingTeam || '')} finished at <b>${prog.runs}/${prog.wickets}</b>. ` +
+        `Target to win: <b>${prog.runs + 1}</b>.`, [
+        { label: btn, onclick: () => { hideLsStatus(); startNextInnings(nextInn); } }
+    ]);
+}
+
+async function startNextInnings(nextInn) {
+    beInnings = nextInn;
+    currentStriker = currentNonStriker = currentBowler = null;
+    pendingNewBatter = false;
+    beProgress = null;
+    setScoringEnabled(true);
+    await openBallEntry();
+}
+
+function startSuperOver() {
+    hideLsStatus();
+    startNextInnings(3);
 }
 
 function closeLiveScoring() {
@@ -958,15 +1263,18 @@ function filterContextPlayers(mode) {
 
     // New-batter-after-wicket list: show ALL batting team players.
     // - Dismissed: struck-through, disabled, "(out)"
-    // - Current non-striker at crease: disabled, "(playing)"
+    // - Any player already at the crease (not dismissed): disabled, "(playing)"
     // - Available: selectable
+    const atCreaseNotOut = new Set();
+    if (currentStriker && !beDismissedIDs.includes(currentStriker)) atCreaseNotOut.add(currentStriker);
+    if (currentNonStriker && !beDismissedIDs.includes(currentNonStriker)) atCreaseNotOut.add(currentNonStriker);
     const newBatterOpts = battingTeamPlayers.map(p => {
         const dismissed = beDismissedIDs.includes(p.playerID);
-        const isNonStriker = p.playerID === currentNonStriker;
+        const isPlaying = atCreaseNotOut.has(p.playerID);
         if (dismissed) {
             return `<option value="${p.playerID}" disabled style="text-decoration:line-through; color:#64748b;">${p.playerName} (out)</option>`;
         }
-        if (isNonStriker) {
+        if (isPlaying) {
             return `<option value="${p.playerID}" disabled style="color:#64748b;">${p.playerName} (playing)</option>`;
         }
         return `<option value="${p.playerID}">${p.playerName}</option>`;
@@ -1168,8 +1476,22 @@ async function lsRefreshStats() {
 
         // Render broadcast-style batting scorecard below numpad
         const allBat = beInnings === 1 ? data.innings1Bat : data.innings2Bat;
-        const allXI = beInnings === 1 ? (data.team1XI || []) : (data.team2XI || []);
-        renderBatTable('ls-bat-body', allBat, allXI);
+
+        // Determine correct batting XI by matching batted IDs (same logic as main scorecard)
+        const batIds = new Set((allBat || []).map(b => String(b.batsmanID)));
+        const xi1 = data.team1XI || [];
+        const xi2 = data.team2XI || [];
+        const xc1 = xi1.filter(p => batIds.has(String(p.playerID))).length;
+        const xc2 = xi2.filter(p => batIds.has(String(p.playerID))).length;
+        const allXI = (xc1 === 0 && xc2 === 0) ? [] : (xc1 >= xc2 ? xi1 : xi2);
+
+        const activeIds = new Set([String(currentStriker), String(currentNonStriker)]);
+        const excludeFromPick = currentNonStriker ? new Set([String(currentNonStriker)]) : null;
+        renderBatTable('ls-bat-body', allBat, allXI, {
+            activeIds,
+            pendingWicket: pendingNewBatter,
+            excludeFromPick
+        });
 
         // Render bowling card
         const allBowl = beInnings === 1 ? data.innings1Bowl : data.innings2Bowl;
@@ -1196,6 +1518,16 @@ function lsSwitchScorecardTab(tab) {
     const innLabel = beInnings === 1 ? '1st' : '2nd';
     const titleEl = document.getElementById('ls-scorecard-title');
     if (titleEl) titleEl.textContent = tab === 'bat' ? `🏏 ${innLabel} Innings — Batting` : `🎯 ${innLabel} Innings — Bowling`;
+}
+
+function lsPickNewBatter(playerID) {
+    if (!playerID || !pendingNewBatter) return;
+    currentStriker = parseInt(playerID);
+    pendingNewBatter = false;
+    persistContext();
+    const name = bePlayers.find(p => p.playerID == currentStriker)?.playerName || '—';
+    showToast(`🏏 ${name} is the new batter`, 'success');
+    lsRefreshStats();
 }
 
 async function updateTimeline() {
@@ -1302,12 +1634,16 @@ function lsOpenWicketModal() {
         bowlingTeam = teams.find(t => t !== currentBattingTeam);
     }
     
+    // Find the designated wicket keeper for the bowling team
+    const fieldPool = bowlingTeam ? bePlayers.filter(p => p.teamName === bowlingTeam) : bePlayers;
+    const wkID = bowlingTeam ? fieldPool.find(p => p.playerRole === 'WicketKeeper')?.playerID : null;
+
     let fieldOpts = '<option value="">— Select Fielder —</option>';
-    if (bowlingTeam) {
-        fieldOpts += bePlayers.filter(p => p.teamName === bowlingTeam).map(p => `<option value="${p.playerID}">${p.playerName}</option>`).join('');
-    } else {
-        fieldOpts += bePlayers.map(p => `<option value="${p.playerID}">${p.playerName}</option>`).join('');
-    }
+    fieldOpts += fieldPool.map(p => {
+        const isWK = String(p.playerID) === String(wkID);
+        return `<option value="${p.playerID}"${isWK ? ' data-wk="1"' : ''}>${p.playerName}${isWK ? ' (WK)' : ''}</option>`;
+    }).join('');
+
     const fielderSelect = document.getElementById('ls-wicket-fielder');
     if (fielderSelect) fielderSelect.innerHTML = fieldOpts;
 
@@ -1330,6 +1666,15 @@ function lsOnWicketTypeChange() {
     const type = document.getElementById('ls-wicket-type').value;
     const needF = ['Caught','RunOut','Stumped'].includes(type);
     document.getElementById('ls-wicket-fielder-box').style.display = needF ? 'block' : 'none';
+
+    // For Stumped, auto-select the wicket keeper
+    if (type === 'Stumped') {
+        const fielderSelect = document.getElementById('ls-wicket-fielder');
+        if (fielderSelect) {
+            const wkOption = fielderSelect.querySelector('option[data-wk]');
+            if (wkOption) fielderSelect.value = wkOption.value;
+        }
+    }
 }
 
 function lsConfirmWicket() {
@@ -1433,6 +1778,19 @@ async function lsSubmitBall(isWicket) {
         }
         if (overEnded) {
             manualSwapStriker();
+        }
+
+        // ── ICC innings/target/result evaluation (from the server) ──
+        beProgress = stateData.progress || data.progress || null;
+        renderProgressBanner(beProgress);
+        if (beProgress && beProgress.inningsComplete) {
+            // Innings (or match) is over — skip the normal new-over / new-batter
+            // prompts and drive the innings-break / result / super-over flow.
+            updateTimeline();
+            if (document.getElementById('ball-log-body') && beMatchId) loadBallLog(beMatchId, beInnings);
+            if (window.DataSync) DataSync.ballRecorded(beMatchId, beInnings);
+            handleInningsEnd(beProgress);
+            return;
         }
 
         if (isWicket) {

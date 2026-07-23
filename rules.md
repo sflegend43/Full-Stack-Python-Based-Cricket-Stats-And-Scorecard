@@ -61,7 +61,13 @@ After a wicket falls:
 ### 4.2 Batting Statistics (get_batting)
 - `balls`: Excludes Retired deliveries
 - `dismissal`: Derived from `dismissedPlayerID` matching `batsmanID`
-- `fielderName` and `bowlerName`: Subqueried from the specific dismissal ball
+- `fielderName` and `bowlerName`: Subqueried from the specific dismissal ball via JOIN on BallByBall
+
+### 4.3 Scorecard Batting Order
+- Batted players sorted by **XI position** (batting arrival order), never changes once set
+- Active-but-not-batted (new striker just selected, no row yet) inserted right after last batted row
+- Yet-to-bat players sorted by **XI position** (not role) — strict arrival order
+- Picker dropdown excludes: dismissed players (out), any player currently at crease not dismissed (both striker and non-striker)
 
 ## 5. Match Rules
 

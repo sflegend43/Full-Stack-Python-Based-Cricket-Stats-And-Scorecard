@@ -326,6 +326,8 @@
                         <span id="ls-overs" class="be-main-overs">(0.0)</span>
                     </div>
                     <div class="be-crr">CRR: <span id="ls-crr">0.00</span></div>
+                    <!-- Live target / chase / result banner (2nd innings & super over) -->
+                    <div id="ls-target-banner" class="ls-target-banner" style="display:none;"></div>
                 </div>
 
                 <!-- Current over timeline (6 circular indicators) -->
@@ -454,6 +456,16 @@
                         <tbody id="ls-bowl-body"></tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+
+        <!-- Innings break / result / super-over overlay -->
+        <div id="ls-status-overlay" class="ls-status-overlay" style="display:none;">
+            <div class="ls-status-card glass-card">
+                <div id="ls-status-emoji" class="ls-status-emoji">🏏</div>
+                <h2 id="ls-status-title" class="ls-status-title">Innings Complete</h2>
+                <p id="ls-status-msg" class="ls-status-msg"></p>
+                <div id="ls-status-actions" class="ls-status-actions"></div>
             </div>
         </div>
 

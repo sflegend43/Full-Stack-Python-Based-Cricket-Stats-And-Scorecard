@@ -47,10 +47,14 @@ Authentication uses email + password with Bearer token. Signup stores a plaintex
 - Full batting card: runs, balls, 4s, 6s, SR, dismissal info with fielder + bowler
 - Full bowling card: overs, maidens, runs, wickets, economy
 - Ball-by-ball log with over-by-over run summary
-- Scorecard tabs: 1st/2nd Innings Batting (broadcast-style with out/not-out/dnb rows), 1st/2nd Innings Bowling (placeholder), Playing XI, Detailed Stats
-- Detailed Stats: Players Performance (bowling tables) + Ball Log (over-by-over visual + detailed table)
-- Batting card uses `pickBattingXI()` to determine batting team; yet-to-bat players listed from Playing XI
-- Live scoring tabs below ball entry: Batting card + Bowling card with state-based row styling
+- Scorecard tabs: 6 main tabs — 1st/2nd Innings Batting (broadcast-style), 1st/2nd Innings Bowling (placeholder), Playing XI, Detailed Stats
+- **Broadcast batting** (`renderBatTable`): 7 columns (Batsman, Dismissal, Runs, Balls, 4s, 6s, SR); 3 row states (`sc-out` gold+pink strikethrough, `sc-notout` mint-green bar, `sc-dnb` dimmed); `formatDismissal()` composes `c {f} b {b}`, `st {f} b {b}`, `run out ({f})`, `lbw b {b}`, `b {b}`, etc.
+- **Batting order**: batted→XI position; active-but-not-batted→right after batted; yet-to-bat→XI order (strict arrival order)
+- Detailed Stats → 2 sub-tabs:
+  - **Players Performance** → 4 sub-sub-tabs (1st/2nd Innings Batting old-style, 1st/2nd Innings Bowling)
+  - **Ball Log** → over-by-over visual + detailed table
+- Batting card uses `pickBattingXI()` to determine batting team; accepts `opts.activeIds` and `opts.pendingWicket` for live updates
+- Live scoring tabs below ball entry: Batting card + Bowling card with state-based row styling; WK fielder tagging with `data-wk`
 
 ### 4.4 Player Management
 - Player cards with hero image, role badge, flag, batting/bowling style, DOB
