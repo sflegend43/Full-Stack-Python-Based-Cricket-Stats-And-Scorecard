@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="cricket_anim.css">
     <script>if (!localStorage.getItem('cricketUser')) window.location.href = 'login.html';</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="transitions.js"></script>
 </head>
 <body>
@@ -49,15 +50,18 @@
                     <li><a href="matches.html" class="nav-link">📋 Matches</a></li>
                     <li><a href="players.html" class="nav-link active">🏏 Players</a></li>
                     <li><a href="teams.html" class="nav-link">🛡️ Teams</a></li>
+                    <li><a href="rankings.html" class="nav-link">📈 Rankings</a></li>
+                    <li><a href="records.html" class="nav-link">🏅 Records</a></li>
                     <li><a href="stats.html" class="nav-link">🤖 AI Stats</a></li>
                 </ul>
             </div>
         </nav>
 
         <!-- ═══════════ HEADER ═══════════ -->
+        <div id="players-browse-view">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
             <div>
-                <h1 style="font-size:1.6rem; font-weight:800; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
+                <h1 style="font-size:1.6rem; font-weight:800; color:var(--primary-light);">
                     🏏 Player Registry
                 </h1>
                 <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.2rem;" id="player-count-label">Loading players…</p>
@@ -89,6 +93,61 @@
 
         <!-- ═══════════ PLAYERS GRID ═══════════ -->
         <div id="players-grid" class="players-grid"></div>
+        </div><!-- /players-browse-view -->
+
+        <!-- ═══════════ PLAYER PROFILE VIEW ═══════════ -->
+        <div id="player-profile-view" style="display:none;">
+          <div class="profile-back-bar">
+            <button class="btn-cancel" onclick="closePlayerProfile()">← Back to Players</button>
+          </div>
+          <div class="profile-hero glass-card">
+            <div class="profile-hero-img"><img id="profile-photo" src="dummy.png" alt=""></div>
+            <div class="profile-hero-info">
+              <h1 class="profile-name" id="profile-name"></h1>
+              <div class="profile-meta">
+                <span id="profile-flag"></span>
+                <span id="profile-nationality"></span>
+                <span id="profile-role-badge"></span>
+                <span id="profile-bat-style"></span>
+                <span id="profile-bowl-style"></span>
+              </div>
+              <div class="profile-career-pills">
+                <div class="career-pill"><span class="career-pill-num" id="profile-runs">—</span><span class="career-pill-label">Runs</span></div>
+                <div class="career-pill"><span class="career-pill-num" id="profile-wickets">—</span><span class="career-pill-label">Wickets</span></div>
+                <div class="career-pill"><span class="career-pill-num" id="profile-matches">—</span><span class="career-pill-label">Matches</span></div>
+                <div class="career-pill"><span class="career-pill-num" id="profile-fifties">—</span><span class="career-pill-label">50s</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="profile-tabs">
+            <button class="filter-btn active" id="ptab-batting" onclick="switchProfileTab('batting')">Batting</button>
+            <button class="filter-btn" id="ptab-bowling" onclick="switchProfileTab('bowling')">Bowling</button>
+            <button class="filter-btn" id="ptab-matches" onclick="switchProfileTab('matches')">Recent Matches</button>
+          </div>
+          <div id="profile-batting-panel" class="glass-card" style="padding:20px;">
+            <h3 class="section-title" style="margin-top:0;">Runs by Year</h3>
+            <canvas id="profile-batting-chart" height="120"></canvas>
+            <table class="profile-stat-table" style="margin-top:20px;">
+              <thead><tr><th>Year</th><th>Inn</th><th>Runs</th><th>HS</th><th>Balls</th><th>SR</th><th>4s</th><th>6s</th><th>Ducks</th></tr></thead>
+              <tbody id="profile-batting-tbody"></tbody>
+            </table>
+          </div>
+          <div id="profile-bowling-panel" class="glass-card" style="display:none; padding:20px;">
+            <h3 class="section-title" style="margin-top:0;">Wickets by Year</h3>
+            <canvas id="profile-bowling-chart" height="120"></canvas>
+            <table class="profile-stat-table" style="margin-top:20px;">
+              <thead><tr><th>Year</th><th>Matches</th><th>Overs</th><th>Runs</th><th>Wkts</th><th>Econ</th></tr></thead>
+              <tbody id="profile-bowling-tbody"></tbody>
+            </table>
+          </div>
+          <div id="profile-matches-panel" class="glass-card" style="display:none; padding:20px;">
+            <h3 class="section-title" style="margin-top:0;">Recent Matches</h3>
+            <table class="profile-stat-table">
+              <thead><tr><th>Date</th><th>Tournament</th><th>Format</th><th>vs</th><th>Runs (Balls)</th><th>Wkts</th><th>Result</th></tr></thead>
+              <tbody id="profile-matches-tbody"></tbody>
+            </table>
+          </div>
+        </div>
     </div>
 
     <!-- ═══════════ ADD MODAL ═══════════ -->
@@ -199,5 +258,6 @@
     <script src="players.js"></script>
     <script src="parallax.js"></script>
     <button id="scroll-top-btn" class="scroll-top-btn" title="Back to top">↑</button>
+    <script src="enhance.js"></script>
 </body>
 </html>

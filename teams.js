@@ -12,6 +12,15 @@ async function authFetch(url, options = {}) {
 
 const API = 'http://localhost:5001';
 
+function escHtml(v) {
+    return String(v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+
 function getUser() {
     try { return JSON.parse(localStorage.getItem('cricketUser')); }
     catch { return null; }
@@ -232,8 +241,7 @@ function renderTeamDetail(data) {
         <div style="display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap;">
             <div style="font-size:4rem; filter:drop-shadow(0 0 16px rgba(22,163,74,0.5));">${flag}</div>
             <div style="flex:1;">
-                <h2 style="font-size:1.8rem; font-weight:900; background:var(--gradient-main);
-                    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
+                <h2 style="font-size:1.8rem; font-weight:900; color:var(--primary-light);">
                     ${shortTeam(t.teamName)}
                 </h2>
                 <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.3rem;">${t.teamName}</p>
