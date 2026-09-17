@@ -4,11 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="view-transition" content="same-origin">
-    <title>🏏 CricketStats Pro | AI Voice Stats</title>
+    <title>🏏 CricketStats Pro | AI Stats</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="cricket_anim.css">
-    <!-- Chart.js for Year by Year graph -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>if (!localStorage.getItem('cricketUser')) window.location.href = 'login.html';</script>
     <script src="transitions.js"></script>
@@ -30,7 +29,7 @@
                 <div class="nav-center">
                     <div class="ai-pill">
                         <span class="ai-badge">AI INSIGHT</span>
-                        <span class="ai-text" id="ai-insight-text">Loading predictions...</span>
+                        <span class="ai-text" id="ai-insight-text">Compare players, teams & head-to-heads</span>
                     </div>
                 </div>
                 <div class="nav-right">
@@ -48,87 +47,337 @@
                     <li><a href="matches.html" class="nav-link">📋 Matches</a></li>
                     <li><a href="players.html" class="nav-link">🏏 Players</a></li>
                     <li><a href="teams.html" class="nav-link">🛡️ Teams</a></li>
+                    <li><a href="rankings.html" class="nav-link">📈 Rankings</a></li>
+                    <li><a href="records.html" class="nav-link">🏅 Records</a></li>
                     <li><a href="stats.html" class="nav-link active">🤖 AI Stats</a></li>
                 </ul>
             </div>
         </nav>
 
-        <div class="glass-card glow-box" style="text-align: center; padding: 2rem;">
-            <h1 style="color:var(--neon-green); margin-bottom:1rem; font-family:'Orbitron', sans-serif;">📊 Stats Viewer</h1>
-            <p style="color:var(--text-muted); margin-bottom:2rem;">Select a stat type and enter the details to view records.</p>
-            
-            <div style="display:flex; justify-content:center; gap: 1rem; margin-bottom: 1rem;">
-                <select id="stat-type" class="form-input" style="max-width: 200px;" onchange="onStatTypeChange()">
+        <!-- PAGE HEADER -->
+        <header class="ai-stats-header">
+            <div class="ai-stats-header-copy">
+                <span class="ai-stats-kicker">Intelligence Hub</span>
+                <h1 class="ai-stats-title">AI Stats Explorer</h1>
+                <p class="ai-stats-subtitle">
+                    Dig into full player careers, team head-to-heads, batter vs bowler battles, and player vs team records — all in live comparison tables.
+                </p>
+            </div>
+            <div class="ai-stats-header-badges">
+                <div class="ai-mode-chip"><span>👤</span> Player Stats</div>
+                <div class="ai-mode-chip"><span>⚔️</span> Head to Head</div>
+                <div class="ai-mode-chip"><span>🎯</span> Player vs Player</div>
+                <div class="ai-mode-chip"><span>🏟️</span> Player vs Team</div>
+            </div>
+        </header>
+
+        <!-- QUERY CARD -->
+        <section class="glass-card ai-query-card">
+            <div class="ai-query-top">
+                <div>
+                    <h2 class="section-title" style="margin:0;">Build a Query</h2>
+                    <p class="ai-query-hint">Choose a comparison mode, pick the subjects, then load the full stats table.</p>
+                </div>
+                <div class="ai-type-pills" id="stat-type-pills" role="tablist" aria-label="Stat type">
+                    <button type="button" class="ai-type-pill active" data-type="player">👤 Player Stats</button>
+                    <button type="button" class="ai-type-pill" data-type="h2h">⚔️ Head to Head</button>
+                    <button type="button" class="ai-type-pill" data-type="pvp">🎯 Player vs Player</button>
+                    <button type="button" class="ai-type-pill" data-type="pvt">🏟️ Player vs Team</button>
+                </div>
+                <select id="stat-type" class="ai-hidden-select" aria-hidden="true" tabindex="-1">
                     <option value="player">Player Stats</option>
                     <option value="h2h">Head to Head (Teams)</option>
                     <option value="pvp">Player vs Player</option>
                     <option value="pvt">Player vs Team</option>
                 </select>
             </div>
-            
-            <form id="stats-form" onsubmit="submitStatsQuery(event)" style="display:flex; justify-content:center; gap: 1rem; align-items: flex-end; flex-wrap:wrap;">
-                
-                <!-- Inputs for Player Stats -->
-                <div id="input-player" class="stat-input-group">
-                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Player Name</label>
-                    <input type="text" id="stat-player-name" class="form-input" placeholder="e.g. Babar Azam">
+
+            <form id="stats-form" class="ai-query-form" onsubmit="submitStatsQuery(event)">
+                <!-- Player Stats -->
+                <div id="input-player" class="stat-input-group form-group">
+                    <label for="stat-player-name">Player</label>
+                    <input list="players-datalist" type="text" id="stat-player-name" class="form-input" placeholder="Search player e.g. Babar Azam" autocomplete="off">
                 </div>
-                
-                <!-- Inputs for Head to Head -->
-                <div id="input-team1" class="stat-input-group" style="display:none;">
-                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Team 1</label>
-                    <input type="text" id="stat-team1" class="form-input" placeholder="e.g. Pakistan">
+
+                <!-- Head to Head -->
+                <div id="input-team1" class="stat-input-group form-group" style="display:none;">
+                    <label for="stat-team1" id="label-team1">Team 1</label>
+                    <input list="teams-datalist" type="text" id="stat-team1" class="form-input" placeholder="e.g. Pakistan" autocomplete="off">
                 </div>
-                <div id="input-team2" class="stat-input-group" style="display:none;">
-                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Team 2</label>
-                    <input type="text" id="stat-team2" class="form-input" placeholder="e.g. India">
+                <div id="input-team2" class="stat-input-group form-group" style="display:none;">
+                    <label for="stat-team2">Team 2</label>
+                    <input list="teams-datalist" type="text" id="stat-team2" class="form-input" placeholder="e.g. India" autocomplete="off">
                 </div>
-                
-                <!-- Inputs for Player vs Player -->
-                <div id="input-batsman" class="stat-input-group" style="display:none;">
-                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Batsman</label>
-                    <input type="text" id="stat-batsman" class="form-input" placeholder="e.g. Babar Azam">
+
+                <!-- Player vs Player -->
+                <div id="input-batsman" class="stat-input-group form-group" style="display:none;">
+                    <label for="stat-batsman">Player A (Batsman)</label>
+                    <input list="players-datalist" type="text" id="stat-batsman" class="form-input" placeholder="e.g. Babar Azam" autocomplete="off">
                 </div>
-                <div id="input-bowler" class="stat-input-group" style="display:none;">
-                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Bowler</label>
-                    <input type="text" id="stat-bowler" class="form-input" placeholder="e.g. Shaheen">
+                <div id="input-bowler" class="stat-input-group form-group" style="display:none;">
+                    <label for="stat-bowler">Player B (Bowler)</label>
+                    <input list="players-datalist" type="text" id="stat-bowler" class="form-input" placeholder="e.g. Jasprit Bumrah" autocomplete="off">
                 </div>
-                
-                <button type="submit" class="btn-submit" style="width:auto; padding: 0.65rem 2rem; border-radius: 8px; margin: 0; margin-bottom: 2px;">
-                    🔍 Get Stats
-                </button>
+
+                <div class="ai-query-actions">
+                    <button type="submit" class="btn-submit ai-get-btn" id="get-stats-btn">
+                        🔍 Get Stats
+                    </button>
+                    <button type="button" class="btn-cancel" onclick="resetStatsForm()">Clear</button>
+                </div>
             </form>
+
+            <datalist id="players-datalist"></datalist>
+            <datalist id="teams-datalist"></datalist>
+        </section>
+
+        <!-- LOADING -->
+        <div id="stats-loading" class="ai-loading" style="display:none;">
+            <div class="ai-loading-spinner"></div>
+            <span>Crunching match data…</span>
         </div>
 
-        <div id="results-container" style="display:none; margin-top:2rem;">
-            <!-- Player Stats Result -->
-            <div id="player-stats-card" class="glass-card" style="display:none;">
-                <h3 id="player-stats-title" style="color:var(--primary-light);">Player Stats</h3>
-                <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-top:1rem;">
-                    <div style="flex:1; min-width:300px;">
-                        <h4 style="color:var(--gold);">Recent Form (Last 5 Matches)</h4>
-                        <table style="width:100%; margin-top:0.5rem;">
-                            <thead><tr><th>Match Date</th><th>Runs Scored</th></tr></thead>
-                            <tbody id="player-recent-tbody"></tbody>
+        <!-- RESULTS -->
+        <div id="results-container" class="ai-results" style="display:none;">
+
+            <!-- PLAYER STATS -->
+            <div id="player-stats-card" class="ai-result-panel" style="display:none;">
+                <div class="ai-result-head">
+                    <div>
+                        <span class="ai-result-tag">Player Career</span>
+                        <h3 id="player-stats-title">Player Stats</h3>
+                        <p id="player-stats-meta" class="ai-result-meta"></p>
+                    </div>
+                </div>
+
+                <div class="stats-grid ai-kpi-grid" id="player-kpi-grid"></div>
+
+                <div class="ai-split">
+                    <div class="glass-card ai-panel-inner">
+                        <h4 class="ai-panel-title">Career Snapshot</h4>
+                        <div class="table-scroll">
+                            <table class="ai-stats-table" id="player-career-table">
+                                <thead>
+                                    <tr>
+                                        <th>Metric</th>
+                                        <th>Batting</th>
+                                        <th>Bowling</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="player-career-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="glass-card ai-panel-inner">
+                        <h4 class="ai-panel-title">Recent Form (Last 8)</h4>
+                        <div class="table-scroll">
+                            <table class="ai-stats-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Match</th>
+                                        <th>Runs</th>
+                                        <th>Balls</th>
+                                        <th>4s</th>
+                                        <th>6s</th>
+                                        <th>SR</th>
+                                        <th>Wkts</th>
+                                        <th>Result</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="player-recent-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-card ai-panel-inner ai-chart-card">
+                    <h4 class="ai-panel-title">Year-by-Year Performance</h4>
+                    <div class="ai-chart-wrap">
+                        <canvas id="player-year-chart" height="110"></canvas>
+                    </div>
+                    <div class="table-scroll" style="margin-top:1rem;">
+                        <table class="ai-stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Year</th>
+                                    <th>Matches</th>
+                                    <th>Runs</th>
+                                    <th>Balls</th>
+                                    <th>Avg</th>
+                                    <th>SR</th>
+                                    <th>Wickets</th>
+                                    <th>Bowl Runs</th>
+                                </tr>
+                            </thead>
+                            <tbody id="player-yearly-tbody"></tbody>
                         </table>
                     </div>
-                    <div style="flex:1; min-width:300px; background:rgba(0,0,0,0.3); border-radius:8px; padding:1rem;">
-                        <h4 style="color:var(--neon-green);">Year-by-Year Performance</h4>
-                        <canvas id="player-year-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- HEAD TO HEAD -->
+            <div id="h2h-stats-card" class="ai-result-panel" style="display:none;">
+                <div class="ai-result-head">
+                    <div>
+                        <span class="ai-result-tag">Team Rivalry</span>
+                        <h3 id="h2h-stats-title">Head to Head</h3>
+                        <p id="h2h-stats-meta" class="ai-result-meta"></p>
+                    </div>
+                </div>
+
+                <div class="stats-grid ai-kpi-grid" id="h2h-kpi-grid"></div>
+
+                <div class="glass-card ai-panel-inner">
+                    <h4 class="ai-panel-title">Comparison Table</h4>
+                    <div class="table-scroll">
+                        <table class="ai-stats-table ai-compare-table">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th id="h2h-col-t1">Team 1</th>
+                                    <th id="h2h-col-t2">Team 2</th>
+                                </tr>
+                            </thead>
+                            <tbody id="h2h-compare-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="glass-card ai-panel-inner">
+                    <h4 class="ai-panel-title">Match History</h4>
+                    <div class="table-scroll">
+                        <table class="ai-stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Format</th>
+                                    <th>Teams</th>
+                                    <th>Winner</th>
+                                    <th>Margin</th>
+                                    <th>Team1 Runs/Wkts</th>
+                                    <th>Team2 Runs/Wkts</th>
+                                </tr>
+                            </thead>
+                            <tbody id="h2h-history-tbody"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
 
-            <!-- Generic Text Result -->
-            <div id="generic-stats-card" class="glass-card" style="display:none; text-align:center; padding:2rem;">
-                <h3 id="generic-stats-title" style="color:var(--primary-light); margin-bottom:1rem;">Result</h3>
-                <div id="generic-stats-text" style="font-size:1.4rem; font-weight:700; color:var(--gold);"></div>
+            <!-- PLAYER VS PLAYER -->
+            <div id="pvp-stats-card" class="ai-result-panel" style="display:none;">
+                <div class="ai-result-head">
+                    <div>
+                        <span class="ai-result-tag">Duel</span>
+                        <h3 id="pvp-stats-title">Player vs Player</h3>
+                        <p id="pvp-stats-meta" class="ai-result-meta"></p>
+                    </div>
+                </div>
+
+                <div class="stats-grid ai-kpi-grid" id="pvp-kpi-grid"></div>
+
+                <div class="glass-card ai-panel-inner">
+                    <h4 class="ai-panel-title">Head-to-Head Battle Table</h4>
+                    <div class="table-scroll">
+                        <table class="ai-stats-table ai-compare-table">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th id="pvp-col-a">Player A</th>
+                                    <th id="pvp-col-b">Player B</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pvp-compare-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="glass-card ai-panel-inner">
+                    <h4 class="ai-panel-title">Match-by-Match Duels</h4>
+                    <div class="table-scroll">
+                        <table class="ai-stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Match</th>
+                                    <th>Runs Scored</th>
+                                    <th>Balls</th>
+                                    <th>Wickets (how many times)</th>
+                                    <th>Winning Performance?</th>
+                                    <th>Team Wins When Playing Against</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pvp-matches-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PLAYER VS TEAM -->
+            <div id="pvt-stats-card" class="ai-result-panel" style="display:none;">
+                <div class="ai-result-head">
+                    <div>
+                        <span class="ai-result-tag">Opposition Record</span>
+                        <h3 id="pvt-stats-title">Player vs Team</h3>
+                        <p id="pvt-stats-meta" class="ai-result-meta"></p>
+                    </div>
+                </div>
+
+                <div class="stats-grid ai-kpi-grid" id="pvt-kpi-grid"></div>
+
+                <div class="glass-card ai-panel-inner">
+                    <h4 class="ai-panel-title">Summary vs Opposition</h4>
+                    <div class="table-scroll">
+                        <table class="ai-stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pvt-summary-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="glass-card ai-panel-inner">
+                    <h4 class="ai-panel-title">Innings / Match Log</h4>
+                    <div class="table-scroll">
+                        <table class="ai-stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Match</th>
+                                    <th>Player Team</th>
+                                    <th>Runs</th>
+                                    <th>Balls</th>
+                                    <th>4s</th>
+                                    <th>6s</th>
+                                    <th>SR</th>
+                                    <th>Wickets</th>
+                                    <th>Bowl Runs</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pvt-matches-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ERROR / EMPTY -->
+            <div id="generic-stats-card" class="glass-card ai-empty-card" style="display:none;">
+                <div class="empty-icon">📭</div>
+                <h3 id="generic-stats-title">Result</h3>
+                <div id="generic-stats-text" class="ai-empty-text"></div>
             </div>
         </div>
-
     </div>
 
     <script src="stats.js"></script>
     <button id="scroll-top-btn" class="scroll-top-btn" title="Back to top">↑</button>
+    <script src="enhance.js"></script>
 </body>
 </html>

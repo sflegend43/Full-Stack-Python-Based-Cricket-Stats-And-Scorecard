@@ -1,23 +1,19 @@
-// parallax.js — Stadium background parallax scroll effect
-// The stadium image shifts downward at 35% of scroll speed,
-// making it feel like you're looking into a stadium as you scroll.
-
+// parallax.js — subtle pointer-based depth on stadium overlay (optional polish)
 (function () {
-    var el = null;
+    const overlay = document.querySelector('.stadium-bg-overlay');
+    if (!overlay || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-    function getEl() {
-        if (!el) el = document.querySelector('.stadium-bg-overlay');
-        return el;
-    }
+    let raf = 0;
+    let tx = 0, ty = 0;
 
-    function onScroll() {
-        var bg = getEl();
-        if (!bg) return;
-        // Shift UP at 35% of scroll distance — reversed parallax
-        bg.style.transform = 'translateY(' + (window.scrollY * -0.35) + 'px)';
-    }
-
-    // Run once on load to set initial position
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
+    window.addEventListener('pointermove', (e) => {
+        const x = (e.clientX / window.innerWidth - 0.5) * 8;
+        const y = (e.clientY / window.innerHeight - 0.5) * 6;
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+            tx += (x - tx) * 0.08;
+            ty += (y - ty) * 0.08;
+            overlay.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(1.03)`;
+        });
+    }, { passive: true });
 })();

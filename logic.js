@@ -2,7 +2,6 @@
 
 const API = 'http://localhost:5001';
 
-// ─── Auth Helpers ───
 function getUser() {
     try { return JSON.parse(localStorage.getItem('cricketUser')); }
     catch { return null; }
@@ -11,13 +10,10 @@ function getUser() {
 async function authFetch(url, options = {}) {
     const user = getUser();
     const headers = options.headers || {};
-    if (user && user.token) {
-        headers['Authorization'] = `Bearer ${user.token}`;
-    }
+    if (user && user.token) headers['Authorization'] = `Bearer ${user.token}`;
     return fetch(url, { ...options, headers });
 }
 
-// ─── RBAC Enforcement ───
 document.addEventListener('DOMContentLoaded', () => {
     const _user = getUser();
     if (!_user || !_user.isAdmin) {
@@ -41,46 +37,62 @@ function showToast(msg, type = 'success') {
 }
 
 function fmtFormat(fmt) {
-    const map = { T20:'badge-t20', ODI:'badge-odi', TEST:'badge-test', T10:'badge-t10' };
-    return `<span class="badge ${map[fmt]||'badge-t20'}">${fmt}</span>`;
+    const map = { T20: 'badge-t20', ODI: 'badge-odi', TEST: 'badge-test', T10: 'badge-t10' };
+    return `<span class="badge ${map[fmt] || 'badge-t20'}">${fmt || '—'}</span>`;
 }
 
-function fmtRole(role) {
-    const map = {
-        Batsman:      'badge-batsman',
-        Bowler:       'badge-bowler',
-        AllRounder:   'badge-allrounder',
-        WicketKeeper: 'badge-keeper'
-    };
-    return `<span class="badge ${map[role]||'badge-batsman'}">${role}</span>`;
+function shortTeam(name) {
+    if (!name) return '—';
+    return String(name).replace(' Cricket Team', '');
 }
 
-// ─── Init ───
+function esc(v) {
+    return String(v ?? '')
+        .replace(/&/g, '&' + 'amp;')
+        .replace(/</g, '&' + 'lt;')
+        .replace(/>/g, '&' + 'gt;')
+        .replace(/"/g, '&' + 'quot;');
+}
+
+function setText(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+}
+
+function statusBadge(status) {
+    const s = (status || 'upcoming').toLowerCase();
+    const cls = s === 'running' ? 'status-running' : s === 'completed' ? 'status-finished' : 'status-upcoming';
+    const label = s === 'completed' ? 'Finished' : s.charAt(0).toUpperCase() + s.slice(1);
+    return `<span class="status-pill ${cls}">${label}</span>`;
+}
+
+function progressBar(done, total) {
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    return `
+      <div class="progress-track" title="${done}/${total} matches">
+        <div class="progress-fill" style="width:${pct}%"></div>
+      </div>
+      <div class="progress-meta">${done}/${total} matches · ${pct}%</div>`;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const user = getUser();
     if (!user) { window.location.href = 'login.html'; return; }
 
-    // Set user display
-    const nameEl   = document.getElementById('user-name-display');
+    const nameEl = document.getElementById('user-name-display');
     const avatarEl = document.getElementById('user-avatar');
-    if (nameEl)   nameEl.textContent   = user.fullname || user.email;
+    if (nameEl) nameEl.textContent = user.fullname || user.email;
     if (avatarEl) avatarEl.textContent = (user.fullname || 'A')[0].toUpperCase();
 
-    // Seed DB on first load (silently)
-    try {
-        await fetch(`${API}/api/seed`, { method: 'POST' });
-    } catch { /* server might not be running */ }
+    try { await fetch(`${API}/api/seed`, { method: 'POST' }); } catch { /* ignore */ }
 
     await Promise.all([
-        loadTournaments(),
-        loadOverview(),
+        loadTournamentDashboard(),
         loadRecentMatches(),
-        loadLeaderboards(),
-        loadCompletedTournaments()
+        refreshAIInsight()
     ]);
 });
 
-// ─── Auto-refresh when data changes on other pages ───
 if (window.DataSync) {
     DataSync.on('ball-recorded', refreshDashboard);
     DataSync.on('match-completed', refreshDashboard);
@@ -89,157 +101,120 @@ if (window.DataSync) {
 }
 
 function refreshDashboard() {
-    loadOverview();
+    loadTournamentDashboard();
     loadRecentMatches();
-    loadLeaderboards();
-    loadTournaments();
-    loadCompletedTournaments();
+    refreshAIInsight();
 }
 
-// ─── Tournaments ───
-async function loadTournaments() {
+async function refreshAIInsight() {
     try {
-        const res = await fetch(`${API}/api/tournaments`);
+        const res = await fetch(`${API}/api/stats/ai-insight`);
+        if (!res.ok) return;
         const data = await res.json();
-        const select = document.getElementById('tournament-filter');
-        if (!select) return;
-        data.forEach(t => {
-            const opt = document.createElement('option');
-            opt.value = t.tournamentName;
-            opt.textContent = `${t.tournamentName} (${t.format})`;
-            select.appendChild(opt);
-        });
-    } catch {
-        console.error('Tournaments fetch failed');
+        const el = document.getElementById('ai-insight-text');
+        if (el && data.insight) el.textContent = data.insight;
+    } catch { /* silent */ }
+}
+
+async function loadTournamentDashboard() {
+    try {
+        const [tRes, oRes] = await Promise.all([
+            fetch(`${API}/api/tournaments`),
+            fetch(`${API}/api/stats/overview`)
+        ]);
+        const tournaments = await tRes.json();
+        const overview = oRes.ok ? await oRes.json() : {};
+
+        const running = tournaments.filter(t => t.status === 'running' || t.status === 'upcoming' && (t.totalMatches || 0) > 0 && (t.completedMatches || 0) < (t.totalMatches || 0));
+        // Split cleanly by server status
+        const runningList = tournaments.filter(t => t.status === 'running');
+        const finishedList = tournaments.filter(t => t.status === 'completed');
+        const upcomingList = tournaments.filter(t => t.status === 'upcoming');
+
+        setText('stat-running', runningList.length);
+        setText('stat-finished', finishedList.length);
+        setText('stat-upcoming', upcomingList.length);
+        setText('stat-matches', overview.totalMatches ?? tournaments.reduce((s, t) => s + (t.totalMatches || 0), 0));
+        setText('stat-teams', overview.totalTeams ?? '—');
+        setText('stat-live', tournaments.reduce((s, t) => s + (t.liveMatches || 0), 0));
+        setText('running-count', runningList.length);
+        setText('finished-count', finishedList.length);
+
+        renderTournamentCards('running-tournaments', runningList.length ? runningList : upcomingList, runningList.length ? 'running' : 'upcoming');
+        renderTournamentCards('finished-tournaments', finishedList, 'finished');
+    } catch (e) {
+        console.error('Tournament dashboard failed', e);
     }
 }
 
-async function loadDashboardStats() {
-    await loadOverview();
-}
-
-// ─── Overview Stats ───
-async function loadOverview() {
-    try {
-        const filterEl = document.getElementById('tournament-filter');
-        const q = (filterEl && filterEl.value) ? `?tournamentName=${encodeURIComponent(filterEl.value)}` : '';
-        const res  = await fetch(`${API}/api/stats/overview${q}`);
-        const data = await res.json();
-        setText('stat-matches', data.totalMatches);
-        setText('stat-teams',   data.totalTeams);
-        setText('stat-runs',    data.totalRuns.toLocaleString());
-        setText('stat-wickets', data.totalWickets);
-        setText('stat-sixes',   data.totalSixes);
-        setText('stat-fours',   data.totalFours);
-    } catch {
-        console.error('Overview fetch failed');
+function renderTournamentCards(containerId, list, mode) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!list.length) {
+        el.innerHTML = `<div class="empty-state soft-empty">No ${mode} tournaments yet.</div>`;
+        return;
     }
+    el.innerHTML = list.map(t => {
+        const total = t.totalMatches || 0;
+        const done = t.completedMatches || 0;
+        const teams = (t.teams || []).map(shortTeam).slice(0, 6);
+        const more = (t.teams || []).length - teams.length;
+        return `
+        <article class="tour-mini-card">
+            <div class="tour-mini-top">
+                <div>
+                    <h4>${esc(t.tournamentName)}</h4>
+                    <div class="tour-mini-meta">
+                        ${fmtFormat(t.format)}
+                        ${statusBadge(t.status)}
+                        <span class="meta-dot">${t.totalTeams || (t.teams || []).length || 0} teams</span>
+                        ${t.overs ? `<span class="meta-dot">${t.overs} overs</span>` : ''}
+                    </div>
+                </div>
+                <a class="btn-view" href="tournaments.html?focus=${encodeURIComponent(t.tournamentName)}">Schedule</a>
+            </div>
+            ${progressBar(done, total)}
+            <div class="tour-team-chips">
+                ${teams.map(n => `<span class="team-chip">${esc(n)}</span>`).join('')}
+                ${more > 0 ? `<span class="team-chip muted">+${more}</span>` : ''}
+            </div>
+            <div class="tour-mini-foot">
+                <span>${esc(t.startDate || 'TBD')} → ${esc(t.endDate || 'TBD')}</span>
+                <span>${t.liveMatches || 0} open fixtures</span>
+            </div>
+        </article>`;
+    }).join('');
 }
 
-function setText(id, val) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = val;
-}
-
-// ─── Recent Matches ───
 async function loadRecentMatches() {
     try {
-        const res  = await fetch(`${API}/api/matches`);
+        const res = await fetch(`${API}/api/matches?exclude=Scheduled`);
         const data = await res.json();
-        const tb   = document.getElementById('matches-table');
+        const tb = document.getElementById('matches-table');
         if (!tb) return;
-        if (!data.length) {
-            tb.innerHTML = `<tr><td colspan="10" class="empty-state"><span class="empty-icon">🏏</span>No matches found.</td></tr>`;
+        const rows = (data || []).slice().reverse().slice(0, 12);
+        if (!rows.length) {
+            tb.innerHTML = `<tr><td colspan="8" class="empty-state">No matches found.</td></tr>`;
             return;
         }
-        tb.innerHTML = data.map(m => {
-            const winner = m.winnerName
-                ? `<span style="color:var(--neon-green); font-weight:700;">${shortTeam(m.winnerName)}</span>`
-                : `<span style="color:var(--text-muted)">TBD</span>`;
-            return `
-            <tr>
+        tb.innerHTML = rows.map(m => {
+            const done = m.winnerName;
+            const score = `${m.team1TotalRuns || 0}/${m.team1TotalWickets || 0} · ${m.team2TotalRuns || 0}/${m.team2TotalWickets || 0}`;
+            const status = done
+                ? `<span style="color:var(--neon-green);font-weight:700">${esc(shortTeam(m.winnerName))} won</span>`
+                : `<span style="color:var(--gold)">In progress</span>`;
+            return `<tr>
                 <td><strong style="color:var(--gold)">#${m.matchID}</strong></td>
-                <td>${m.tournamentName}</td>
+                <td>${esc(m.tournamentName)}</td>
                 <td>${fmtFormat(m.matchFormat)}</td>
-                <td>${shortTeam(m.team1Name)}</td>
-                <td><strong style="color:var(--neon-green)">${m.team1TotalRuns}/${m.team1TotalWickets}</strong></td>
-                <td>${shortTeam(m.team2Name)}</td>
-                <td><strong style="color:var(--neon-green)">${m.team2TotalRuns}/${m.team2TotalWickets}</strong></td>
-                <td>${winner}</td>
-                <td style="color:var(--text-muted); font-size:0.8rem;">${m.matchDate || '—'}</td>
+                <td><strong>${esc(shortTeam(m.team1Name))}</strong> vs <strong>${esc(shortTeam(m.team2Name))}</strong></td>
+                <td>${score}</td>
+                <td>${status}</td>
+                <td style="color:var(--text-muted)">${esc(m.matchDate || '—')}</td>
                 <td><a href="matches.html?id=${m.matchID}" class="btn-view">Scorecard →</a></td>
             </tr>`;
         }).join('');
     } catch {
         console.error('Matches fetch failed');
-    }
-}
-
-function shortTeam(name) {
-    if (!name) return '—';
-    return name.replace(' Cricket Team', '');
-}
-
-// ─── Tournaments & Leaderboards ───
-async function loadCompletedTournaments() {
-    try {
-        const res = await fetch(`${API}/api/tournaments`);
-        const data = await res.json();
-        const tb = document.getElementById('completed-tournaments-table');
-        if (!tb) return;
-        if (!data.length) {
-            tb.innerHTML = `<tr><td colspan="4" class="empty-state">No tournaments found.</td></tr>`;
-            return;
-        }
-        tb.innerHTML = data.map(t => {
-            return `<tr>
-                <td><strong style="color:var(--gold)">${t.tournamentName}</strong></td>
-                <td>—</td>
-                <td><span style="color:var(--text-muted)">TBD</span></td>
-                <td>${t.totalTeams || t.teams.length} Teams</td>
-            </tr>`;
-        }).join('');
-    } catch {
-        console.error('Completed tournaments fetch failed');
-    }
-}
-
-async function loadLeaderboards() {
-    try {
-        const filterEl = document.getElementById('tournament-filter');
-        const q = (filterEl && filterEl.value) ? `?tournamentName=${encodeURIComponent(filterEl.value)}` : '';
-        const res = await fetch(`${API}/api/stats/leaderboard${q}`);
-        const data = await res.json();
-        
-        const batTb = document.getElementById('top-batsmen');
-        const bowlTb = document.getElementById('top-bowlers');
-        
-        if (batTb) {
-            batTb.innerHTML = data.topBatsmen.map(p => {
-                const avg = p.totalRuns > 0 ? (p.totalRuns / p.ballsFaced * 100).toFixed(1) : '0.0';
-                return `<tr>
-                    <td><strong>${p.playerName}</strong></td>
-                    <td>—</td>
-                    <td><strong style="color:var(--primary-light)">${p.totalRuns}</strong></td>
-                    <td style="color:var(--text-muted)">—</td>
-                    <td style="color:var(--text-muted)">${avg}</td>
-                </tr>`;
-            }).join('') || `<tr><td colspan="5" class="empty-state">No stats available</td></tr>`;
-        }
-        
-        if (bowlTb) {
-            bowlTb.innerHTML = data.topBowlers.map(p => {
-                const econ = p.ballsBowled > 0 ? ((p.runsConceded / p.ballsBowled) * 6).toFixed(2) : '0.00';
-                return `<tr>
-                    <td><strong>${p.playerName}</strong></td>
-                    <td>—</td>
-                    <td><strong style="color:var(--red-ball-light)">${p.wickets}</strong></td>
-                    <td style="color:var(--text-muted)">${econ}</td>
-                    <td style="color:var(--text-muted)">—</td>
-                </tr>`;
-            }).join('') || `<tr><td colspan="5" class="empty-state">No stats available</td></tr>`;
-        }
-    } catch {
-        console.error('Leaderboards fetch failed');
     }
 }

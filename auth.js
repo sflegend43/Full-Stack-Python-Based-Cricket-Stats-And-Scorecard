@@ -1,94 +1,88 @@
-// auth.js — CricketStats Pro | Authentication Logic
-
+// auth.js — CricketStats Pro | Login & Signup
 const API = 'http://localhost:5001';
 
-// ─── Shared flash helper ───
-function showFlash(msg, type = 'error') {
+function showAuthError(msg) {
     const el = document.getElementById('flash-message');
     if (!el) return;
+    el.className = 'flash flash-error';
     el.textContent = msg;
-    el.className = type;
     el.style.display = 'block';
-    setTimeout(() => {
-        el.style.display = 'none';
-        el.className = '';
-    }, 4000);
 }
 
-// ─── Login ───
-const loginForm = document.getElementById('loginForm');
-if (loginForm) {
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById('login-btn');
-        btn.textContent = '⏳ Signing in…';
-        btn.disabled = true;
+function showAuthSuccess(msg) {
+    const el = document.getElementById('flash-message');
+    if (!el) return;
+    el.className = 'flash flash-success';
+    el.textContent = msg;
+    el.style.display = 'block';
+}
 
-        const email    = loginForm.email.value.trim();
-        const password = loginForm.password.value.trim();
+function storeSession(user) {
+    localStorage.setItem('cricketUser', JSON.stringify(user));
+}
 
-        try {
-            const res = await fetch(`${API}/api/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
-            });
-            const data = await res.json();
+document.addEventListener('DOMContentLoaded', () => {
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
 
-            if (!res.ok) {
-                showFlash(data.error || 'Login failed', 'error');
-            } else {
-                localStorage.setItem('cricketUser', JSON.stringify(data.user));
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('login-btn');
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+            try {
+                const res = await fetch(`${API}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showAuthError(data.error || 'Login failed');
+                    return;
+                }
+                storeSession(data.user);
                 window.location.href = 'index.html';
+            } catch {
+                showAuthError('Cannot reach server. Is it running on port 5001?');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Login to Dashboard'; }
             }
-        } catch {
-            showFlash('Server unreachable. Make sure app.py is running.', 'error');
-        } finally {
-            btn.textContent = '🚀 Login to Dashboard';
-            btn.disabled = false;
-        }
-    });
-}
+        });
+    }
 
-// ─── Signup ───
-const signupForm = document.getElementById('signupForm');
-if (signupForm) {
-    signupForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById('signup-btn');
-        btn.textContent = '⏳ Creating Account…';
-        btn.disabled = true;
-
-        const fullname = signupForm.fullname.value.trim();
-        const email    = signupForm.email.value.trim();
-        const password = signupForm.password.value.trim();
-        const payload = { fullname, email, password };
-
-        // Role is never trusted client-side — only send the optional admin key for backend validation.
-        const adminKey = signupForm.adminKey?.value.trim();
-        if (adminKey) {
-            payload.adminKey = adminKey;
-        }
-
-        try {
-            const res = await fetch(`${API}/api/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-
-            if (!res.ok) {
-                showFlash(data.error || 'Signup failed', 'error');
-            } else {
-                showFlash('Account created! Redirecting to login…', 'success');
-                setTimeout(() => { window.location.href = 'login.html'; }, 1500);
+    if (signupForm) {
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('signup-btn');
+            const fullname = (document.getElementById('fullname') || {}).value?.trim() || '';
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const roleEl = document.getElementById('role');
+            const role = roleEl ? roleEl.value : 'user';
+            const adminKey = (document.getElementById('adminKey') || {}).value || '';
+            if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+            try {
+                const res = await fetch(`${API}/api/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fullname, email, password, adminKey: role === 'admin' ? adminKey : '' })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showAuthError(data.error || 'Signup failed');
+                    return;
+                }
+                storeSession(data.user);
+                showAuthSuccess('Account created. Redirecting…');
+                setTimeout(() => { window.location.href = 'index.html'; }, 600);
+            } catch {
+                showAuthError('Cannot reach server. Is it running on port 5001?');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
             }
-        } catch {
-            showFlash('Server unreachable. Make sure app.py is running.', 'error');
-        } finally {
-            btn.textContent = '✅ Create Account';
-            btn.disabled = false;
-        }
-    });
-}
+        });
+    }
+});

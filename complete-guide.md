@@ -7,7 +7,7 @@ Everything about this project: every file, every function, every endpoint, every
 ## Table of Contents
 1. [Project Overview](#1-project-overview)
 2. [File Inventory](#2-file-inventory)
-3. [Backend — app.py (1749 lines)](#3-backend)
+3. [Backend — app.py (4407 lines)](#3-backend)
 4. [Database Schema (13 Tables)](#4-database-schema)
 5. [Frontend — HTML Pages](#5-frontend-html-pages)
 6. [Frontend — JavaScript Files](#6-frontend-javascript-files)
@@ -18,12 +18,13 @@ Everything about this project: every file, every function, every endpoint, every
 11. [Design System](#11-design-system)
 12. [Key Decisions & Known Issues](#12-key-decisions--known-issues)
 13. [Running the App](#13-running-the-app)
+14. [Recent Fixes](#14-recent-fixes)
 
 ---
 
 ## 1. Project Overview
 
-A full-stack Python/Flask cricket statistics and live scorekeeping platform. Two user roles (admin/fan), 10 international teams, 251 players, ball-by-ball scoring, and AI-powered stats.
+A full-stack Python/Flask cricket statistics and live scorekeeping platform. Two user roles (admin/fan), 10 international teams, 251 players, ball-by-ball scoring with Super Over support, tournament generation with full scheduling, and AI-powered stats.
 
 **Run:** `python app.py` → `http://localhost:5001/login.html`
 
@@ -33,33 +34,41 @@ A full-stack Python/Flask cricket statistics and live scorekeeping platform. Two
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `app.py` | 1749 | Flask backend: 47 API routes, DB init, auth, scoring logic |
-| `seed_data.py` | ~500 | Static data: 10 teams, 251 players, 251 squad entries |
-| `reset_db.py` | ~20 | DB reset utility |
-| `dump_schema.py` | ~15 | Schema dump utility |
+| `app.py` | 4407 | Flask backend: 60+ API routes, DB init, auth, scoring logic, Super Over, tournament generation, schedule management |
+| `seed_data.py` | 549 | Static data: 10 teams, 251 players, 251 squad entries |
+| `reset_db.py` | 25 | DB reset utility |
+| `dump_schema.py` | 3 | Schema dump utility |
 | `requirements.txt` | 2 | Flask, werkzeug |
 | `Start_App.bat` | 1 | Windows launcher |
-| `matches.html` | 644 | Match list, scorecard, live scoring |
-| `players.html` | 203 | Player roster + add/edit modals |
-| `teams.html` | 150 | Team list + roster detail |
-| `tournaments.html` | 196 | Tournament CRUD + standings + squads |
-| `rankings.html` | 110 | Team + player rankings |
-| `index.html` | 173 | Dashboard with stats overview |
-| `stats.html` | 134 | AI stats query page |
-| `login.html` | 57 | Auth page |
-| `matches.js` | 1859 | Match list, scorecard, live scoring logic |
-| `players.js` | 431 | Player cards, search, add/edit forms |
-| `teams.js` | 364 | Team list, roster, featured players |
-| `tournaments.js` | 413 | Tournament CRUD, squad wizard, standings |
-| `rankings.js` | 107 | Rankings display |
-| `logic.js` | ~300 | Dashboard: overview, leaderboards, AI insight |
-| `transitions.js` | ~200 | View transitions, scroll behavior, DataSync |
-| `auth.js` | ~80 | Login/signup form handling |
-| `style.css` | 2309 | All styles: 28 major sections |
-| `cricket_anim.css` | ~27 | Cricket animations |
+| `matches.html` | 930 | Match list, scorecard, live scoring |
+| `players.html` | 254 | Player roster + add/edit modals |
+| `teams.html` | 146 | Team list + roster detail |
+| `tournaments.html` | 354 | Tournament CRUD + standings + squads + schedule board |
+| `rankings.html` | 119 | Team + player rankings |
+| `index.html` | 108 | Dashboard with stats overview |
+| `stats.html` | 354 | AI stats query page (player stats, H2H, P vs P, P vs Team) |
+| `records.html` | 100 | Hall of Fame — all-time records |
+| `signup.html` | 75 | Registration page |
+| `login.html` | 50 | Auth page |
+| `matches.js` | 2642 | Match list, scorecard, live scoring logic |
+| `tournaments.js` | 1053 | Tournament CRUD, wizard, squad selection, schedule board, bracket |
+| `stats.js` | 629 | Stats page logic (player stats, H2H, PVP, PVT) |
+| `players.js` | 517 | Player cards, search, add/edit forms |
+| `teams.js` | 337 | Team list, roster, featured players |
+| `rankings.js` | 190 | Rankings display |
+| `logic.js` | 195 | Dashboard: overview, leaderboards, AI insight |
+| `transitions.js` | 246 | View transitions, scroll behavior, DataSync |
+| `auth.js` | 82 | Login/signup form handling |
+| `records.js` | 86 | Hall of Fame records display |
+| `enhance.js` | 48 | Shared UX layer: AI insight refresh |
+| `cricket_scene.js` | 6 | Cricket animation |
+| `parallax.js` | 17 | Parallax scroll effect |
+| `style.css` | 3726 | All styles: 30+ major sections |
+| `cricket_anim.css` | 6 | Cricket animations |
 | `Players Pics/` | 96 files | 95 player PNGs + 1 SVG placeholder |
 | `dummy.png` | 1 | Fallback player image |
 | `player-placeholder.svg` | 1 | Players page hero fallback |
+| `stadium_bg.png` | 1 | Background overlay for all pages |
 
 ---
 
@@ -69,17 +78,16 @@ A full-stack Python/Flask cricket statistics and live scorekeeping platform. Two
 
 | Line | Item | Purpose |
 |------|------|---------|
-| 7 | `Flask, request, jsonify, send_from_directory` | Flask core |
-| 8 | `sqlite3` | Database |
-| 11 | `secrets` | Token generation |
-| 12 | `wraps` | Decorator preservation |
-| 13 | `generate_password_hash, check_password_hash` | Password hashing |
-| 398 | `import seed_data` | Static data (mid-file import) |
-| 63 | `BASE_DIR` | Script directory |
-| 64 | `DB_PATH` | `cricket_stats.db` path |
-| 67 | `_ADMIN_KEY_DEV_FALLBACK` | `'CRICKET_ADMIN_2026'` |
-| 69 | `app` | Flask instance, serves static files from BASE_DIR |
-| 1122 | `MAX_OVERS_PER_BOWLER` | `{'T10': 2, 'T20': 4, 'ODI': 10, 'TEST': None}` |
+| 1–13 | Standard imports | `os`, `json`, `uuid`, `secrets`, `sqlite3`, `datetime`, `random`, `hashlib`, `re`, `string`, `textwrap`, `copy`, `itertools` |
+| 13 | `werkzeug.security` | `generate_password_hash`, `check_password_hash` |
+| 77 | `BASE_DIR` | Script directory |
+| 78 | `DB_PATH` | `cricket_stats.db` path |
+| 86 | `app` | Flask instance, serves static files from BASE_DIR |
+| 89 | `_ADMIN_KEY_DEV_FALLBACK` | `'CRICKET_ADMIN_2026'` |
+| 507 | `import seed_data` | Static data (mid-file import) |
+| 2229 | `MAX_OVERS_PER_BOWLER` | `{'T10': 2, 'T20': 4, 'ODI': 10, 'TEST': None}` |
+| 2235 | `SUPER_OVER_BALLS = 6` | Max legal balls per super over |
+| 2236 | `SUPER_OVER_WICKETS = 2` | Max wickets per super over |
 
 ### 3.2 Helper Functions
 
@@ -95,128 +103,160 @@ Extracts Bearer token from Authorization header.
 #### `get_current_user()` — Line 43
 Queries `users` table by token. Returns `sqlite3.Row` or `None`.
 
-#### `requires_admin(f)` — Line 51
+#### `requires_admin(f)` — Line 65
 Decorator: returns 403 if user is not admin.
 
-#### `get_admin_registration_key()` — Line 72
+#### `get_admin_registration_key()` — Line 89
 Returns `CRICKET_ADMIN_KEY` env var or `'CRICKET_ADMIN_2026'`.
 
-#### `get_db()` — Line 80
+#### `get_db()` — Line 104
 Opens SQLite connection with `row_factory=Row`, enables WAL + foreign_keys.
 
-#### `init_db()` — Line 88
-Creates all 13 tables via `executescript`. Runs 4 `ALTER TABLE` migrations for columns added later.
+#### `init_db()` — Line 112
+Creates all 13 tables via `executescript`. Runs `ALTER TABLE` migrations for columns added later (including `freeHitPending` on MatchState, `tournamentType`/`status` on Tournament, `tossDecision` on Matches, `teamName` on PlayingXI, `fielderID` on BallByBall, `token` on users).
 
-#### `_resolve_registration_role(admin_key_submitted)` — Line 289
+#### `_resolve_registration_role(admin_key_submitted)` — Line 396
 Returns `('admin', 1)` if key matches, `('user', 0)` if no key, `(None, None)` if bad key.
 
-#### `register_user(data)` — Line 301
+#### `register_user(data)` — Line 408
 Unified registration. Validates fields, hashes password, generates token via `secrets.token_hex(32)`, inserts into `users`.
 
-#### `save_match_state(conn, match_id, innings, striker_id, nonstriker_id, bowler_id)` — Line 1266
-Upserts `MatchState` row for persistence across page reloads.
+#### `save_match_state(conn, match_id, innings, striker_id, nonstriker_id, bowler_id, free_hit_pending=None)` — Line 2625
+Upserts `MatchState` row for persistence across page reloads. Persists free hit state.
 
-#### `enforce_bowler_rules(conn, match_id, innings, match_format, over, ball, bowler)` — Line 1295
-Returns error string or `None`. Checks: (1) consecutive overs, (2) max overs per format.
+#### `enforce_bowler_rules(conn, match_id, innings, match_format, over, ball, bowler)` — Line 2757
+Returns error string or `None`. Checks: (1) consecutive overs, (2) max overs per format. Returns `None` (no enforcement) for `innings >= 3` (Super Over).
 
-### 3.3 All 47 API Routes
+#### `get_ball_state(match_id)` — Line 2420
+Returns full ball state for a given innings via `GET /api/balls/state/<match_id>?innings=N`. Key data returned:
+- `players`, `battingOptions`, `bowlingOptions`: Playing XI lists with selectable/disabled flags
+- `battingTeam`, `bowlingTeam`: derived from toss winner + decision
+- `progress`: ICC status (overs, target, required rate, result)
+- `match`, `dismissedPlayerIDs`, `bowlerOvers`, `maxOversPerBowler`
+- `strikerID`, `nonStrikerID`, `bowlerID`, `freeHitPending`
 
-#### Auth (4 routes)
+#### `evaluate_progress(conn, match_id, innings)` — Line 2291
+Returns dict with `overs`, `target`, `runRate`, `requiredRate`, `result` etc. For innings 1-2 uses `MAX_OVERS_PER_BOWLER`. For Super Over (innings 3-4) uses `SUPER_OVER_BALLS`/`SUPER_OVER_WICKETS`.
+
+#### `_teams_for_innings(conn, match_id, innings)` — Line 2245
+Returns `(batting_team, bowling_team)` tuple based on toss result. Correctly handles Super Over team swap.
+
+#### `_innings_runs_wkts(conn, match_id, innings)` — Line 2271
+Returns `(runs, wickets)` aggregate for an innings, excluding `Retired` marker rows from legal deliveries.
+
+#### `_batting_slot(conn, match_id, innings, player_id)` — Line 2646
+Returns a player's batting stats for an innings (runs, balls, 4s, 6s, isOut, dismissal info).
+
+### 3.3 All API Routes
+
+#### Auth (5 routes)
 
 | # | Method | Route | Line | Admin | Body | Returns |
 |---|--------|-------|------|-------|------|---------|
-| 1 | GET | `/` | 277 | No | — | `login.html` |
-| 2 | GET | `/<page>.html` | 281 | No | — | Static HTML page |
-| 3 | POST | `/api/register` | 345 | No | fullname, email, password, adminKey? | 201 user+token |
-| 4 | POST | `/api/signup` | 352 | No | Same as register | 201 user+token |
-| 5 | POST | `/api/login` | 359 | No | email, password | 200 user+token |
+| 1 | GET | `/` | 384 | No | — | `login.html` |
+| 2 | GET | `/<page>.html` | 388 | No | — | Static HTML page |
+| 3 | POST | `/api/register` | 452 | No | fullname, email, password, adminKey? | 201 user+token |
+| 4 | POST | `/api/signup` | 459 | No | Same as register | 201 user+token |
+| 5 | POST | `/api/login` | 466 | No | email, password | 200 user+token |
 
 #### Players (7 routes)
 
 | # | Method | Route | Line | Admin | Body/Params | Returns |
 |---|--------|-------|------|-------|-------------|---------|
-| 6 | GET | `/api/players` | 453 | No | ?role=, ?nationality=, ?search= | Player array |
-| 7 | GET | `/api/players/by_team` | 473 | No | — | `{team: [players]}` |
-| 8 | POST | `/api/players/add_to_pool` | 490 | YES | playerName, DOB, nationality, role, teamName | 201 |
-| 9 | GET | `/api/players/<id>` | 520 | No | — | player + batting + bowling stats |
-| 10 | POST | `/api/players` | 547 | YES | playerID, name, DOB, nationality, role | 201 |
-| 11 | PUT | `/api/players/<id>` | 570 | YES | Any subset of fields | 200 |
-| 12 | DELETE | `/api/players/<id>` | 590 | YES | — | 200 (checks BallByBall first) |
+| 6 | GET | `/api/players` | 599 | No | ?role=, ?nationality=, ?search= | Player array |
+| 7 | GET | `/api/players/by_team` | 619 | No | — | `{team: [players]}` |
+| 8 | POST | `/api/players/add_to_pool` | 636 | YES | playerName, DOB, nationality, role, teamName | 201 |
+| 9 | GET | `/api/players/<id>` | 666 | No | — | player + batting + bowling stats |
+| 10 | POST | `/api/players` | 693 | YES | playerID, name, DOB, nationality, role | 201 |
+| 11 | PUT | `/api/players/<id>` | 716 | YES | Any subset of fields | 200 |
+| 12 | DELETE | `/api/players/<id>` | 736 | YES | — | 200 (checks BallByBall first) |
 
 #### Teams (3 routes)
 
 | # | Method | Route | Line | Admin | Body/Params | Returns |
 |---|--------|-------|------|-------|-------------|---------|
-| 13 | GET | `/api/teams` | 616 | No | — | Team array sorted by ranking |
-| 14 | POST | `/api/teams` | 622 | YES | teamName, countryName, headCoach? | 201 |
-| 15 | GET | `/api/teams/<name>` | 648 | No | — | team + squad + matches |
+| 13 | GET | `/api/teams` | 762 | No | — | Team array sorted by ranking |
+| 14 | POST | `/api/teams` | 768 | YES | teamName, countryName, headCoach? | 201 |
+| 15 | GET | `/api/teams/<name>` | 794 | No | — | team + squad + matches |
 
 #### Matches (5 routes)
 
 | # | Method | Route | Line | Admin | Body/Params | Returns |
 |---|--------|-------|------|-------|-------------|---------|
-| 16 | GET | `/api/matches` | 674 | No | ?format=, ?type= | Match array |
-| 17 | GET | `/api/matches/<id>` | 691 | No | — | match + ballByBall + playingXI |
-| 18 | POST | `/api/matches` | 720 | YES | All match fields | 201 |
-| 19 | POST | `/api/matches/<id>/xi` | 746 | YES | {players: [{playerID, matchRole, teamName}]} | 201 |
-| 20 | DELETE | `/api/matches/<id>` | 771 | YES | — | 200 (cascades BallByBall, PlayingXI, MatchState) |
+| 16 | GET | `/api/matches` | 820 | No | ?format=, ?type= | Match array |
+| 17 | GET | `/api/matches/<id>` | 846 | No | — | match + ballByBall + playingXI |
+| 18 | POST | `/api/matches` | 875 | YES | All match fields | 201 |
+| 19 | POST | `/api/matches/<id>/xi` | 901 | YES | {players: [{playerID, matchRole, teamName}]} | 201 |
+| 20 | DELETE | `/api/matches/<id>` | 926 | YES | — | 200 (cascades BallByBall, PlayingXI, MatchState) |
+| 21 | PUT | `/api/matches/<id>/activate` | 1352 | YES | tossWinnerName, tossDecision | 200 |
+| 22 | PUT | `/api/matches/<id>/complete` | 4027 | YES | winnerName?, winMargin? | 200 |
+| 23 | GET | `/api/matches/<id>/win-probability` | 4178 | No | — | Win probability dict |
 
-#### Balls (4 routes)
+#### Balls (5 routes)
 
 | # | Method | Route | Line | Admin | Body/Params | Returns |
 |---|--------|-------|------|-------|-------------|---------|
-| 21 | GET | `/api/balls/<matchId>` | 1092 | No | ?innings= | Ball array |
-| 22 | GET | `/api/balls/state/<matchId>` | 1125 | No | ?innings= | Full state: players, dismissed, bowlerOvers, context |
-| 23 | POST | `/api/balls` | 1321 | YES | Full ball payload | 201 + updates match totals |
-| 24 | PUT | `/api/balls/state/<matchId>` | 1278 | YES | strikerID?, nonStrikerID?, bowlerID? | 200 |
-| 25 | PUT | `/api/balls/<ballId>` | 1397 | YES | Full ball payload | 200 + recalculates totals |
-| 26 | DELETE | `/api/balls/<ballId>` | 1459 | YES | — | 200 + recalculates totals |
+| 24 | GET | `/api/balls/<matchId>` | 2199 | No | ?innings= | Ball array |
+| 25 | GET | `/api/balls/state/<matchId>` | 2419 | No | ?innings= | Full state: players, dismissed, bowlerOvers, context |
+| 26 | PUT | `/api/balls/state/<matchId>` | 2740 | YES | strikerID?, nonStrikerID?, bowlerID? | 200 |
+| 27 | POST | `/api/balls` | 2789 | YES | Full ball payload | 201 + updates match totals |
+| 28 | PUT | `/api/balls/<ballId>` | 2918 | YES | Full ball payload | 200 + recalculates totals |
+| 29 | DELETE | `/api/balls/<ballId>` | 2963 | YES | — | 200 + recalculates totals |
 
-#### Venues (1 route)
-
-| # | Method | Route | Line | Admin | Returns |
-|---|--------|-------|------|-------|---------|
-| 27 | GET | `/api/venues` | 1491 | No | Venue array |
-
-#### Umpires (1 route)
+#### Venues & Umpires (2 routes)
 
 | # | Method | Route | Line | Admin | Returns |
 |---|--------|-------|------|-------|---------|
-| 28 | GET | `/api/umpires` | 1498 | No | Umpire array |
+| 30 | GET | `/api/venues` | 2985 | No | Venue array |
+| 31 | GET | `/api/umpires` | 2992 | No | Umpire array |
 
-#### Tournaments (5 routes)
+#### Tournaments (11 routes)
 
 | # | Method | Route | Line | Admin | Body | Returns |
 |---|--------|-------|------|-------|------|---------|
-| 29 | GET | `/api/tournaments` | 791 | No | — | Tournament array + teams |
-| 30 | POST | `/api/tournaments` | 803 | YES | name, format, teams[] | 201 |
-| 31 | DELETE | `/api/tournaments/<name>` | 825 | YES | — | 200 (cascades everything) |
-| 32 | GET | `/api/tournaments/<name>/squad` | 849 | No | — | `{team: [players]}` |
-| 33 | POST | `/api/tournaments/<name>/squad` | 871 | YES | {squads: [{teamName, playerID}]} | 201 |
+| 32 | GET | `/api/tournaments` | 946 | No | — | Tournament array + teams |
+| 33 | POST | `/api/tournaments` | 982 | YES | name, format, totalTeams, teams[] | 201 |
+| 34 | DELETE | `/api/tournaments/<name>` | 1419 | YES | — | 200 (cascades everything) |
+| 35 | GET | `/api/tournaments/<name>/squad` | 1443 | No | — | `{team: [players]}` |
+| 36 | POST | `/api/tournaments/<name>/squad` | 1465 | YES | {squads: [{teamName, playerID}]} | 201 |
+| 37 | POST | `/api/tournaments/preview-schedule` | 1210 | YES | {tournamentType, format, teams[]} | Schedule preview |
+| 38 | POST | `/api/tournaments/generate` | 1246 | YES | {name, format, tournamentType, status, teams[], overs, schedule} | 201 + all matches |
+| 39 | PUT | `/api/tournaments/<name>/teams` | 1519 | YES | {teams: [teamName]} | 200 (add teams, never removes played) |
+| 40 | POST | `/api/tournaments/<name>/schedule` | 1548 | YES | {schedule: [{team1Name, team2Name, matchType, matchDate, matchGroup}]} | 201 (append fixtures) |
+| 41 | PUT | `/api/matches/<id>/schedule` | 1596 | YES | {team1Name?, team2Name?, matchType?, matchDate?} | 200 (edit Scheduled match) |
+| 42 | GET | `/api/tournaments/<name>/standings` | 4058 | No | — | P, W, L, NR, pts, NRR |
+| 43 | GET | `/api/tournaments/<name>/bracket` | 4147 | No | — | Bracket/knockout tree |
 
-#### Stats & Rankings (7 routes)
+#### Stats & Rankings (11 routes)
 
 | # | Method | Route | Line | Admin | Params | Returns |
 |---|--------|-------|------|-------|--------|---------|
-| 34 | GET | `/api/stats/scorecard/<id>` | 956 | No | — | Full scorecard (bat, bowl, XI) |
-| 35 | GET | `/api/stats/overview` | 1017 | No | ?tournamentName= | Aggregate stats |
-| 36 | GET | `/api/stats/leaderboard` | 901 | No | ?tournamentName= | Top batsmen, bowlers, distributions |
-| 37 | GET | `/api/stats/player` | 1508 | No | ?name= | Recent form + yearly breakdown |
-| 38 | GET | `/api/stats/h2h` | 1543 | No | ?team1=, ?team2= | Win counts |
-| 39 | GET | `/api/stats/player_vs_player` | 1563 | No | ?batsman=, ?bowler= | Balls, runs, dismissals |
-| 40 | GET | `/api/stats/player_vs_team` | 1580 | No | ?player=, ?team= | Runs scored |
-| 41 | GET | `/api/rankings/teams` | 1045 | No | ?format= | Team wins ranking |
-| 42 | GET | `/api/rankings/players` | 1066 | No | ?format= | Player rankings |
-| 43 | PUT | `/api/matches/<id>/complete` | 1599 | YES | winnerName?, winMargin? | 200 |
-| 44 | GET | `/api/tournaments/<name>/standings` | 1619 | No | — | P, W, L, NR, pts, NRR |
+| 44 | GET | `/api/stats/leaderboard` | 1626 | No | ?tournamentName= | Top batsmen, bowlers, distributions |
+| 45 | GET | `/api/stats/scorecard/<id>` | 1684 | No | — | Full scorecard (bat, bowl, XI) |
+| 46 | GET | `/api/stats/overview` | 2082 | No | ?tournamentName= | Aggregate stats |
+| 47 | GET | `/api/rankings/teams` | 2110 | No | ?format= | Team wins ranking |
+| 48 | GET | `/api/rankings/players` | 2155 | No | ?format= | Player rankings |
+| 49 | GET | `/api/stats/player` | 3086 | No | ?name= | Recent form + yearly breakdown |
+| 50 | GET | `/api/stats/h2h` | 3306 | No | ?team1=, ?team2= | Win counts |
+| 51 | GET | `/api/stats/player_vs_player` | 3418 | No | ?batsman=, ?bowler= | Balls, runs, dismissals |
+| 52 | GET | `/api/stats/player_vs_team` | 3573 | No | ?player=, ?team= | Runs scored |
+| 53 | GET | `/api/stats/records` | 3752 | No | — | All-time records |
+| 54 | GET | `/api/stats/ai-insight` | 3816 | No | — | Rotating AI insight for nav pill |
+
+#### Search & Players Extended (4 routes)
+
+| # | Method | Route | Line | Admin | Params | Returns |
+|---|--------|-------|------|-------|--------|---------|
+| 55 | GET | `/api/search` | 3717 | No | ?q= | Global search (players, teams, tournaments, matches) |
+| 56 | GET | `/api/players/<id>/career` | 4241 | No | — | Career stats across formats |
+| 57 | GET | `/api/players/stats` | 4329 | No | — | All player stats |
 
 #### Dev/Seed (2 routes)
 
 | # | Method | Route | Line | Admin | Returns |
 |---|--------|-------|------|-------|---------|
-| 45 | POST | `/api/dev/reset` | 403 | YES | Drops all tables, recreates |
-| 46 | POST | `/api/seed` | 418 | No | Seeds 10 teams, 251 players, 251 squads |
-| 47 | GET | `/api/debug/players` | — | No | Debug player list |
+| 58 | POST | `/api/dev/reset` | 512 | YES | Drops all tables, recreates |
+| 59 | POST | `/api/seed` | 531 | No | Seeds 10 teams, 251 players, 251 squads (venues/umpires must be seeded separately) |
 
 ---
 
@@ -293,6 +333,7 @@ Returns error string or `None`. Checks: (1) consecutive overs, (2) max overs per
 | team1TotalWickets | INTEGER DEFAULT 0 | |
 | team2TotalRuns | INTEGER DEFAULT 0 | |
 | team2TotalWickets | INTEGER DEFAULT 0 | |
+| matchStatus | TEXT DEFAULT 'upcoming' | upcoming/live/completed (migration) |
 
 ### Table: `BallByBall`
 | Column | Type | Notes |
@@ -329,12 +370,14 @@ Returns error string or `None`. Checks: (1) consecutive overs, (2) max overs per
 | PK: (matchID, playerID) | | |
 
 ### Table: `Tournament`
-| Column | Type |
-|--------|------|
-| tournamentName | TEXT PK |
-| format | TEXT NOT NULL |
-| totalTeams | INTEGER |
-| overs | INTEGER |
+| Column | Type | Notes |
+|--------|------|-------|
+| tournamentName | TEXT PK | |
+| format | TEXT NOT NULL | T20/ODI/TEST/T10 |
+| totalTeams | INTEGER | |
+| overs | INTEGER | |
+| tournamentType | TEXT | round-robin/series/knockout (migration) |
+| status | TEXT | upcoming/running/completed (migration) |
 
 ### Table: `TournamentTeams`
 | Column | Type | Notes |
@@ -355,22 +398,25 @@ Returns error string or `None`. Checks: (1) consecutive overs, (2) max overs per
 | Column | Type | Notes |
 |--------|------|-------|
 | matchID | INTEGER NOT NULL | FK→Matches |
-| inningsNumber | INTEGER NOT NULL | CHECK: 1–4 |
+| inningsNumber | INTEGER NOT NULL | CHECK: 1–4 (3‑4 = Super Over) |
 | strikerID | TEXT | |
 | nonStrikerID | TEXT | |
 | bowlerID | TEXT | |
+| freeHitPending | INTEGER DEFAULT 0 | 1 if free hit is active |
 | PK: (matchID, inningsNumber) | | |
 
 ---
 
 ## 5. Frontend — HTML Pages
 
-### 5.1 login.html (57 lines)
+### 5.1 login.html (50 lines)
 - Auth card with cricket branding, email/password form
 - Calls `auth.js` for login logic
-- Links to `signup.html`
 
-### 5.2 index.html (173 lines) — Dashboard
+### 5.2 signup.html (75 lines)
+- Registration form with fullname, email, password, admin key fields
+
+### 5.3 index.html (108 lines) — Dashboard
 - Tournament filter dropdown
 - 6 stat boxes: Matches, Teams, Runs, Wickets, Sixes, Fours
 - Completed Tournaments table
@@ -379,24 +425,24 @@ Returns error string or `None`. Checks: (1) consecutive overs, (2) max overs per
 - Loads Chart.js from CDN
 - Calls `logic.js`
 
-### 5.3 matches.html (644 lines) — Most Complex Page
+### 5.4 matches.html (930 lines) — Most Complex Page
+
 **Three major views:**
 
-**A. Match List View** (lines 58–100)
+**A. Match List View** (lines ~58–100)
 - Header: "Match Centre" + "Add Match" button (admin-only)
 - Format filter: All/T20/T10/ODI/TEST
 - Table: ID, Tournament, Format, Type, Team1, Score1, Team2, Score2, Winner, Date, Actions
 
-**B. Scorecard Detail View** (lines 102–262, hidden by default)
+**B. Scorecard Detail View** (hidden by default)
 - "Back to Matches" + "Enter Ball" (admin-only)
 - Scorecard header (JS-populated)
-- 6 main tabs: 1st Innings Batting, 1st Innings Bowling, 2nd Innings Batting, 2nd Innings Bowling, Playing XI, Detailed Stats
-- 1st/2nd Innings Batting tabs: broadcast-style batting card with 3 row states (out/not out/yet to bat) via `sc-*` CSS classes; `pickBattingXI()` determines which XI batted
-- 1st/2nd Innings Bowling tabs → placeholder (design pending)
-- Playing XI: two-column team boxes
+- 6 main tabs (or 10 for Super Over): 1st Innings Batting, 1st Innings Bowling, 2nd Innings Batting, 2nd Innings Bowling, Playing XI, Detailed Stats
+- Super Over (innings 3‑4): extra tabs shown dynamically with `batList`/`bowlList` variables
+- Broadcast-style batting card with 3 row states (out/not out/yet to bat) via `sc-*` CSS classes
 - Detailed Stats → two sub-tabs:
-  - **Players Performance** → 2 sub-sub-tabs (1st/2nd Innings Bowling) — batting lives on main tabs
-  - **Ball Log** → same as before (over-by-over visual + detailed table)
+  - **Players Performance** → 2 sub-sub-tabs (1st/2nd Innings Bowling)
+  - **Ball Log** → over-by-over visual + detailed table
 
 **C. Live Scoring View** (hidden by default)
 - Toolbar: "Back to Scorecard", match title, LIVE badge
@@ -412,52 +458,59 @@ Returns error string or `None`. Checks: (1) consecutive overs, (2) max overs per
 4. Retire Modal: Batter selection, reason
 5. Add Match Wizard: 3-step (Details → Toss → Playing XI)
 
-### 5.4 players.html (203 lines)
+### 5.5 players.html (254 lines)
 - Search bar + Team dropdown + Role filter (All/Batsman/Bowler/AllRounder/WicketKeeper)
 - Player grid (JS-populated with cards)
 - Add Player modal: team, name, DOB, nationality, batting style, bowling style, role
 - Edit Player modal: same fields
 
-### 5.5 teams.html (150 lines)
+### 5.6 teams.html (146 lines)
 - Teams table: Rank, Team, Country, Coach, "View Roster" button
 - Add Team form (inline, admin-only)
 - Team Detail view: Header (flag, name, ranking, coach, squad size), Roster (featured player hero + scrollable table), Match History
 
-### 5.6 tournaments.html (196 lines)
+### 5.7 tournaments.html (354 lines)
 - "Create Tournament" button (admin-only)
-- Create form: name, format, total teams, overs, team checkboxes
+- Tournament Wizard (multi-step): Series/Tournament toggle, Tournament Type (round-robin/series/knockout), format, overs, team selection
+- Schedule preview + generation
 - Running + Completed tournament tables
 - Squad Selection Modal (wizard: team-by-team, 16 players each)
 - Squad View Modal (player grid for selected team)
 - Standings Modal (P, W, L, NR, Pts, NRR table)
+- Bracket Modal (knockout tree visualization)
+- Schedule Board: tabbed view (Schedule / Table / Bracket)
 
-### 5.7 rankings.html (110 lines)
+### 5.8 rankings.html (119 lines)
 - Format filter dropdown
 - Team Rankings: Team, Matches, Wins
 - Player Rankings: Player, Role, Runs, Wickets
 
-### 5.8 stats.html (134 lines)
+### 5.9 stats.html (354 lines)
 - Stat Type selector: Player Stats, Head to Head, Player vs Player, Player vs Team
 - Dynamic input fields based on selection
 - Results: Player Stats card (recent form table + year-by-year chart) or Generic card
+
+### 5.10 records.html (100 lines)
+- Hall of Fame page showing all-time records
+- Displays top performers across categories
 
 ---
 
 ## 6. Frontend — JavaScript Files
 
-### 6.1 auth.js (~80 lines)
+### 6.1 auth.js (82 lines)
 Handles login/signup form submissions. Stores user object + token in `localStorage.cricketUser`. Redirects to `matches.html` on success.
 
-### 6.2 logic.js (~300 lines) — Dashboard
-| Function | Line | Purpose |
-|----------|------|---------|
-| `loadDashboardStats()` | — | Fetches `/api/stats/overview`, populates 6 stat boxes |
-| `loadLeaderboards()` | — | Fetches `/api/stats/leaderboard`, renders top batsmen/bowlers |
-| `loadRecentMatches()` | — | Fetches `/api/matches`, renders last 10 |
-| `loadCompletedTournaments()` | — | Fetches tournaments, renders completed ones |
-| `refreshAIInsight()` | — | Fetches `/api/stats/ai-insight`, updates pill text |
+### 6.2 logic.js (195 lines) — Dashboard
+| Function | Purpose |
+|----------|---------|
+| `loadDashboardStats()` | Fetches `/api/stats/overview`, populates 6 stat boxes |
+| `loadLeaderboards()` | Fetches `/api/stats/leaderboard`, renders top batsmen/bowlers |
+| `loadRecentMatches()` | Fetches `/api/matches`, renders last 10 |
+| `loadCompletedTournaments()` | Fetches tournaments, renders completed ones |
+| `refreshAIInsight()` | Fetches `/api/stats/ai-insight`, updates pill text |
 
-### 6.3 matches.js (1859 lines) — Largest File
+### 6.3 matches.js (2642 lines) — Largest File
 
 **Global Variables:**
 | Variable | Purpose |
@@ -478,136 +531,196 @@ Handles login/signup form submissions. Stores user object + token in `localStora
 | `lsExtraType/lsExtraRuns` | Extra being entered |
 | `contextMode` | Context modal mode (innings_start/wicket/new_over/manual_swap) |
 | `wicketAtEndOver` | Wicket fell at over end |
-| `beInnings` | Current innings (1 or 2) |
 | `beRuns` | Current pending runs |
-| `beDelType` | Current delivery type
+| `beDelType` | Current delivery type |
 
 **Key Functions:**
 
-| Function | Line | Purpose |
-|----------|------|---------|
-| `authFetch()` | 2 | Wrapper adding Bearer token |
-| `getUser()` | 42 | Parse localStorage user |
-| `logout()` | 53 | Clear auth, redirect |
-| `showToast()` | 57 | Flash notification |
-| `loadMatches()` | 111 | Fetch + render match list |
-| `setFormatFilter()` | 122 | Toggle format filter |
-| `renderMatchList()` | 130 | Build match table HTML |
-| `viewScorecard()` | 164 | Load + show scorecard |
-| `backToList()` | 184 | Return to match list |
-| `renderScorecard()` | 190 | Build full scorecard, calls `pickBattingXI()` |
-| `renderBatTable()` | 244 | Broadcast-style batting card (sc-out/sc-notout/sc-dnb + formatDismissal) |
-| `renderBatTableClassic()` | 397 | Old-style batting table for Detailed Stats sub-sub-tabs |
-| `buildPickerRow()` | — | Inline new-batter picker after last dismissed row |
-| `renderBowlTable()` | — | Bowling stats table |
-| `renderXIBoxes()` | — | Playing XI display |
-| `switchInnings()` | — | Main tab switching (6 tabs) |
-| `switchDetailTab()` | — | Detailed Stats sub-tab switching (Players Performance / Ball Log) |
-| `switchPerfTab()` | — | Players Performance sub-sub-tab switching (1st/2nd Bat old-style + 1st/2nd Bowl) |
-| `formatDismissal()` | 227 | Composes c {f} b {b}, st {f} b {b}, run out ({f}), etc. |
-| `pickBattingXI()` | 208 | Infers batting team XI by matching batsmanIDs |
-| `undoLastBall()` | — | Delete last ball |
-| `deleteMatch()` | — | Delete match with confirm |
-| `populateSelectDropdowns()` | — | Fill match wizard dropdowns |
-| `openAddMatchModal()` | — | Show match wizard |
-| `handleMatchWizard()` | — | Submit new match + XI |
-| `openBallEntry()` | — | Enter live scoring mode |
-| `closeLiveScoring()` | — | Return to scorecard |
-| `filterContextPlayers()` | 1037 | Populate context dropdowns — newBatterOpts excludes both striker+non-striker at crease |
-| `openContextModal()` | 1106 | Show striker/bowler selection |
-| `cancelContextModal()` | 1148 | Cancel with enforcement toast |
-| `confirmContext()` | 1157 | Apply context selection |
-| `persistContext()` | 1190 | Save context to server |
-| `manualSwapStriker()` | 1206 | Swap striker/non-striker |
-| `updateScoreboardStrip()` | 1214 | Update score display |
-| `lsRefreshStats()` | 1229 | Refresh batter/bowler stats — calls renderBatTable+renderBowlTable with activeIds |
-| `lsSwitchScorecardTab()` | 1301 | Switch live card (bat/bowl) |
-| `lsPickNewBatter()` | — | Sets striker, clears pendingNewBatter, calls lsRefreshStats |
-| `lsOpenWicketModal()` | — | WK fielder tagging with data-wk attribute |
-| `lsOnWicketTypeChange()` | — | Auto-select WK for Stumped |
-| `updateTimeline()` | — | Render current over dots |
-| `lsRecordRun()` | — | Record runs (0–6) |
-| `lsOpenExtraModal()` | — | Open extras dialog |
-| `lsConfirmExtra()` | — | Submit extras |
-| `lsOpenWicketModal()` | — | Open wicket dialog |
-| `lsConfirmWicket()` | — | Submit wicket |
-| `lsSubmitBall()` | 1483 | **Core function**: validate, POST ball, handle wicket, advance ball, swap strikes, persist, broadcast |
-| `loadBallLog()` | — | Fetch + render ball log |
-| `renderBallLogViz()` | — | Over-by-over colored chips |
-| `renderBallLogTable()` | — | Detailed ball log table |
-| `playCrowdSound()` | — | Web Audio API crowd noise |
-| `customConfirm()` | — | Promise-based confirm modal |
+| Function | Purpose |
+|----------|---------|
+| `authFetch()` | Wrapper adding Bearer token |
+| `getUser()` | Parse localStorage user |
+| `logout()` | Clear auth, redirect |
+| `showToast()` | Flash notification |
+| `loadMatches()` | Fetch + render match list |
+| `setFormatFilter()` | Toggle format filter |
+| `renderMatchList()` | Build match table HTML |
+| `viewScorecard()` | Load + show scorecard |
+| `backToList()` | Return to match list |
+| `renderScorecard()` | Build full scorecard, calls `pickBattingXI()` |
+| `renderBatTable()` | Broadcast-style batting card (sc-out/sc-notout/sc-dnb + formatDismissal) |
+| `renderBatTableClassic()` | Old-style batting table for Detailed Stats sub-sub-tabs |
+| `buildPickerRow()` | Inline new-batter picker after last dismissed row |
+| `renderBowlTable()` | Bowling stats table |
+| `renderXIBoxes()` | Playing XI display |
+| `switchInnings()` | Main tab switching (6 tabs) |
+| `switchDetailTab()` | Detailed Stats sub-tab switching |
+| `switchPerfTab()` | Players Performance sub-sub-tab switching |
+| `formatDismissal()` | Composes c {f} b {b}, st {f} b {b}, run out ({f}), etc. |
+| `pickBattingXI()` | Infers batting team XI by matching batsmanIDs |
+| `undoLastBall()` | Delete last ball |
+| `deleteMatch()` | Delete match with confirm |
+| `populateSelectDropdowns()` | Fill match wizard dropdowns |
+| `openAddMatchModal()` | Show match wizard |
+| `handleMatchWizard()` | Submit new match + XI |
+| `openBallEntry()` | Enter live scoring mode — fetches ball state from API |
+| `closeLiveScoring()` | Return to scorecard |
+| `applyBallState()` | Applies server ball state to UI (score, players, context) |
+| `filterContextPlayers()` | Populate context dropdowns — excludes dismissed/active players |
+| `openContextModal()` | Show striker/bowler selection |
+| `cancelContextModal()` | Cancel with enforcement toast |
+| `confirmContext()` | Apply context selection |
+| `persistContext()` | Save context to server |
+| `manualSwapStriker()` | Swap striker/non-striker |
+| `updateScoreboardStrip()` | Update score display |
+| `lsRefreshStats()` | Refresh batter/bowler stats |
+| `lsSwitchScorecardTab()` | Switch live card (bat/bowl) |
+| `lsPickNewBatter()` | Sets striker, clears pendingNewBatter, calls lsRefreshStats |
+| `lsOpenWicketModal()` | WK fielder tagging with data-wk attribute |
+| `lsOnWicketTypeChange()` | Auto-select WK for Stumped |
+| `updateTimeline()` | Render current over dots |
+| `lsRecordRun()` | Record runs (0–6) |
+| `lsOpenExtraModal()` | Open extras dialog |
+| `lsConfirmExtra()` | Submit extras |
+| `lsConfirmWicket()` | Submit wicket |
+| `lsSubmitBall()` | Core function: validate, POST ball, handle wicket, advance ball, swap strikes, persist, broadcast |
+| `loadBallLog()` | Fetch + render ball log |
+| `renderBallLogViz()` | Over-by-over colored chips |
+| `renderBallLogTable()` | Detailed ball log table |
+| `playCrowdSound()` | Web Audio API crowd noise |
+| `customConfirm()` | Promise-based confirm modal |
 
-### 6.4 players.js (431 lines)
+### 6.4 tournaments.js (1053 lines)
 
-| Function | Line | Purpose |
-|----------|------|---------|
-| `teamSortKey()` | 29 | Sort teams by `TEAM_ORDER` |
-| `loadPlayers()` | 101 | Fetch players + stats |
-| `applyFilters()` | 132 | Filter by role/search/team |
-| `setRoleFilter()` | 157 | Toggle role filter |
-| `renderPlayers()` | 164 | Build player card grid |
-| `getCountryCode()` | 256 | Country → flagcdn code |
-| `openAddModal()` | 273 | Show add player form |
-| `openEditModal()` | 297 | Populate + show edit form |
-| `deletePlayer()` | 319 | Delete with confirm |
-| `setupForms()` | 333 | Attach add/edit form handlers |
+**Global Variables:**
+| Variable | Purpose |
+|----------|---------|
+| `currentTournamentForSquads` | Tournament being squad-selected |
+| `teamsForSquads` | Teams in current tournament |
+| `currentSquadTeamIndex` | Current team in squad wizard |
+| `playersByTeam` | Players grouped by team |
+| `finalSquadSelection` | Selected squads: [{teamName, playerID}] |
+| `wizardState` | Multi-step wizard state |
+| `scheduleView` | Active view: schedule/table/bracket |
+| `allTournamentsCache` | Cached tournament list |
+| `scheduleMatchesCache` | Cached matches for schedule board |
+
+**Key Functions:**
+
+| Function | Purpose |
+|----------|---------|
+| `authFetch()` | Wrapper adding Bearer token |
+| `getUser()` | Parse localStorage user |
+| `logout()` | Clear auth, redirect |
+| `showToast()` | Flash notification |
+| `toggleForm()` | Show/hide create form |
+| `loadTeamsOptions()` | Populate team checkboxes |
+| `loadTournaments()` | Fetch + render (running vs completed) |
+| `viewStandings()` | Fetch + show standings modal |
+| `viewBracket()` | Fetch + show bracket/knockout tree |
+| `deleteTournament()` | Delete with confirm |
+| `saveTournament()` | Create tournament via wizard |
+| `startSquadSelection()` | Initialize squad wizard |
+| `renderSquadTeam()` | Show current team's player grid |
+| `updateSquadCounter()` | Count selected players |
+| `nextSquadTeam()` | Advance to next team |
+| `submitAllSquads()` | POST all squads |
+| `viewTournamentSquad()` | View registered squad |
+| `customConfirm()` | Promise-based confirm |
+| `setScheduleView()` | Switch schedule/board view |
+| `hydrateScheduleSelector()` | Load tournament selector for schedule board |
+| `renderScheduleBoard()` | Render matches as schedule grid or bracket |
+| `matchBoxHTML()` | Individual match box for schedule |
+| `buildScheduleGrid()` | Grid layout for schedule |
+| `buildBracketTree()` | Bracket tree for knockout |
+| **Wizard functions:** | |
+| `resetWizard()` | Reset wizard state |
+| `openWizardModal()` | Open tournament creation wizard |
+| `closeWizardModal()` | Close wizard |
+| `setSeriesOrTournament()` | Toggle series vs tournament mode |
+| `setTournamentType()` | Select round-robin/series/knockout |
+| `updateWizardProgress()` | Progress bar update |
+| `renderWizardStep()` | Render current wizard step |
+| `wizardNext()` / `wizardBack()` | Navigate wizard steps |
+| `validateWizardStep()` | Validate current step |
+| `populateTeamCheckboxes()` | Load teams for selection |
+| `toggleWizTeam()` | Toggle team selection |
+| `renderScheduleOptions()` | Show format/overs options |
+| `updateMatchCountPreview()` | Preview number of matches |
+| `fetchAndRenderSchedulePreview()` | Fetch schedule from server |
+| `renderScheduleReviewTable()` | Show generated schedule |
+| `startWizardSquads()` | Start squad selection phase |
+| `wizRenderSquadTeam()` | Render squad for current team |
+| `wizUpdateSquadCounter()` | Count selected |
+| `wizCaptureSquad()` | Save current team's squad |
+| `wizNextSquadTeam()` | Advance to next team |
+| `submitTournamentWizard()` | Final submit — POST all data |
+
+### 6.5 players.js (517 lines)
+
+| Function | Purpose |
+|----------|---------|
+| `teamSortKey()` | Sort teams by `TEAM_ORDER` |
+| `loadPlayers()` | Fetch players + stats |
+| `applyFilters()` | Filter by role/search/team |
+| `setRoleFilter()` | Toggle role filter |
+| `renderPlayers()` | Build player card grid |
+| `getCountryCode()` | Country → flagcdn code |
+| `openAddModal()` | Show add player form |
+| `openEditModal()` | Populate + show edit form |
+| `deletePlayer()` | Delete with confirm |
+| `setupForms()` | Attach add/edit form handlers |
 
 **Global Constants:**
 - `TEAM_ORDER`: Pakistan → India → Australia → SA → NZ → WI → rest alphabetical
 - `ROLE_EMOJI`: {Batsman: '🏏', Bowler: '⚡', AllRounder: '🔄', WicketKeeper: '🧤'}
 
-### 6.5 teams.js (364 lines)
+### 6.6 teams.js (337 lines)
 
-| Function | Line | Purpose |
-|----------|------|---------|
-| `loadTeams()` | 100 | Fetch + render team list |
-| `rankBadge()` | 111 | Rank 1/2/3 special badges |
-| `getCountryCode()` | 118 | Country → flag code |
-| `renderTeams()` | 134 | Build team table |
-| `toggleAddTeamForm()` | 168 | Show/hide add form |
-| `saveTeam()` | 173 | Submit new team |
-| `viewTeam()` | 206 | Load team detail |
-| `renderTeamDetail()` | 226 | Build header, roster, match history |
+| Function | Purpose |
+|----------|---------|
+| `loadTeams()` | Fetch + render team list |
+| `rankBadge()` | Rank 1/2/3 special badges |
+| `getCountryCode()` | Country → flag code |
+| `renderTeams()` | Build team table |
+| `toggleAddTeamForm()` | Show/hide add form |
+| `saveTeam()` | Submit new team |
+| `viewTeam()` | Load team detail |
+| `renderTeamDetail()` | Build header, roster, match history |
 
-**Constants:**
-- `FLAG_MAP`: {Pakistan: '🇵🇰', India: '🇮🇳', Australia: '🇦🇺', ...}
-- `FEATURED_PLAYERS`: 10 teams → star player (Babar Azam, Virat Kohli, Steve Smith, Kane Williamson, Rovman Powell, Aiden Markram, Rashid Khan, Litton Das, Harry Brook, Dasun Shanaka)
+### 6.7 stats.js (629 lines)
+Full stats page logic covering Player Stats, Head-to-Head, Player vs Player, Player vs Team queries.
 
-### 6.6 tournaments.js (413 lines)
+### 6.8 rankings.js (190 lines)
 
-| Function | Line | Purpose |
-|----------|------|---------|
-| `toggleForm()` | 61 | Show/hide create form |
-| `loadTeamsOptions()` | 66 | Populate team checkboxes |
-| `loadTournaments()` | 82 | Fetch + render (running vs completed) |
-| `viewStandings()` | 138 | Fetch + show standings modal |
-| `deleteTournament()` | 192 | Delete with confirm |
-| `saveTournament()` | 205 | Create + start squad wizard |
-| `startSquadSelection()` | 249 | Initialize squad wizard |
-| `renderSquadTeam()` | 275 | Show current team's player grid |
-| `updateSquadCounter()` | 313 | Count selected players |
-| `nextSquadTeam()` | 319 | Advance to next team |
-| `submitAllSquads()` | 338 | POST all squads |
-| `viewTournamentSquad()` | 359 | View registered squad |
+| Function | Purpose |
+|----------|---------|
+| `loadRankings()` | Fetch team + player rankings |
+| `fmtRole()` | Format role with badge |
 
-### 6.7 rankings.js (107 lines)
+### 6.9 records.js (86 lines)
+- Fetches and displays all-time Hall of Fame records
 
-| Function | Line | Purpose |
-|----------|------|---------|
-| `loadRankings()` | 28 | Fetch team + player rankings |
-| `fmtRole()` | 15 | Format role with badge |
+### 6.10 enhance.js (48 lines)
+- Shared UX layer loaded on every page
+- `refreshAIInsight()`: fetches `/api/stats/ai-insight`, updates `#ai-insight-text` nav pill
 
-### 6.8 transitions.js (~200 lines)
+### 6.11 transitions.js (246 lines)
 - `DataSync` object: BroadcastChannel + localStorage fallback
 - Events: `ball-recorded`, `match-completed`, `match-created`, `data-changed`
 - Scroll-to-top button visibility
 - Nav auto-hide on scroll (hide down, show up)
 - `document.startViewTransition()` wrapper
 
+### 6.12 cricket_scene.js (6 lines)
+- Cricket animation asset loading
+
+### 6.13 parallax.js (17 lines)
+- Parallax scroll effect for background
+
 ---
 
-## 7. Frontend — CSS (style.css, 2214 lines)
+## 7. Frontend — CSS (style.css, 3726 lines)
 
 ### Section Catalog
 
@@ -647,7 +760,9 @@ Handles login/signup form submissions. Stores user object + token in `localStora
 | 2093–2142 | **Scroll-to-Top** | Fixed bottom-right, 44px, blur bg, visibility toggle |
 | 2144–2156 | **Nav Auto-Hide** | `translateY(-105%)` on scroll down |
 | 2158–2214 | **Team Roster** | Grid 240px + 1fr, featured player hero (280px), scrollable list |
-| 2228–2309 | **Broadcast Scorecard** | `.sc-bat-row`, `.sc-out` (gold+pink strikethrough), `.sc-notout` (mint-green bar), `.sc-dnb` (dimmed), `.sc-name` (1.05rem), `.sc-dismissal` (0.88rem muted), `.sc-num` (1.15rem Orbitron bold), `.sc-table thead th` (0.88rem), `.sc-picker-row`, `.sc-picker-select` |
+| 2228–2309 | **Broadcast Scorecard** | `.sc-bat-row`, `.sc-out`, `.sc-notout`, `.sc-dnb`, `.sc-name`, `.sc-dismissal`, `.sc-num`, `.sc-picker-row`, `.sc-picker-select` |
+| ~3670 | **Stadium Overlay** | `.stadium-bg-overlay` — fixed background overlay for all pages |
+| ~3690–3820 | **Records Page** | `.records-grid`, `.record-card`, `.record-list`, `.record-row` — Hall of Fame layout |
 
 ---
 
@@ -657,6 +772,7 @@ Handles login/signup form submissions. Stores user object + token in `localStora
 - `teams`: 10 entries (Pakistan, India, Australia, SA, NZ, England, WI, Sri Lanka, Bangladesh, Afghanistan)
 - `players`: 251 entries (25 per team), each with playerID, name, DOB, nationality, battingStyle, bowlingStyle, playerRole
 - `squads`: 251 entries mapping each player to their team
+- **Note:** Venues and Umpires are NOT in seed_data. The `/api/seed` endpoint only seeds teams, players, and squads. Venues/umpires must be populated manually or via separate script.
 
 ### 8.2 Players Pics/ (96 entries)
 - 95 PNG files named `PlayerName.png` (e.g., `Babar Azam.png`, `Virat Kohli.png`)
@@ -674,10 +790,12 @@ Handles login/signup form submissions. Stores user object + token in `localStora
 
 | Role | Capabilities |
 |------|-------------|
-| **Admin** | Full CRUD: create/manage teams, players, tournaments, matches; enter ball-by-ball live scoring; delete data |
+| **Admin** | Full CRUD: create/manage teams, players, tournaments, matches; enter ball-by-ball live scoring; delete data; generate tournaments with full scheduling |
 | **Fan (default)** | Read-only: browse dashboards, view scorecards, view player/team stats, view leaderboards |
 
 Authentication uses email + password with Bearer token. Signup stores password with Werkzeug hashing. Admin signup requires a shared admin key (`CRICKET_ADMIN_2026`).
+
+---
 
 ## 10. Business Rules
 
@@ -691,7 +809,7 @@ Authentication uses email + password with Bearer token. Signup stores password w
 | TEST | Unlimited (null) |
 
 - A bowler **cannot bowl two consecutive overs**. If only one bowler has overs remaining, the rule is bypassed.
-- Checked server-side in `enforce_bowler_rules()` before every ball insert
+- Checked server-side in `enforce_bowler_rules()` (line 2757) before every ball insert
 - Checked client-side before showing bowler selection
 - Bowlers filtered by: `playerRole IN ('Bowler','AllRounder') OR (bowlingStyle IS NOT NULL AND TRIM(LOWER(bowlingStyle)) NOT IN ('', 'none'))`
 
@@ -743,6 +861,49 @@ SUM(CASE WHEN (extraType IS NULL OR extraType NOT IN ('Wide','NoBall','Retired')
 -- runsConceded includes ALL runs (bat runs + extras + penalties)
 -- maidens: over where wicketFallen=0, runsScored=0, extras=0 OR IS NULL for all 6 balls
 ```
+
+### 10.7 Tournament Generation
+
+**Tournament Types:**
+- **Round-Robin**: Every team plays every other team once
+- **Series**: Same as round-robin (every team plays each other)
+- **Knockout**: Bracket-style elimination (quarterfinals → semifinals → final)
+
+**Generation Flow (`POST /api/tournaments/generate`):**
+1. Create Tournament row with `tournamentType`, `status='running'`
+2. Create TournamentTeams rows for all selected teams
+3. If round-robin/series: generate all pairings (round-robin schedule)
+4. If knockout: generate bracket with byes for non-power-of-2 sizes
+5. Create Match rows for each pairing with cycling venue/umpire IDs
+6. Create PlayingXI rows for each match (empty — filled later)
+
+**Venue/Umpire Cycling:**
+- Matches cycle through all available venues and umpires from the Venue and Umpire tables
+- `venueID`, `onFieldUmpire1ID`, `onFieldUmpire2ID` are all NOT NULL in the Matches schema
+- If no venues or umpires exist, match creation will fail
+
+**Match Activation (`PUT /api/matches/<id>/activate`):**
+- Requires: tossWinnerName, tossDecision ('bat' or 'bowl')
+- Sets matchStatus to 'live'
+- Updates toss data on the match
+
+**Schedule Management (3 additional routes):**
+- `PUT /api/tournaments/<name>/teams` — Add participating teams after creation (never removes played teams)
+- `POST /api/tournaments/<name>/schedule` — Append Scheduled fixtures (team1Name, team2Name, matchType, matchDate, matchGroup)
+- `PUT /api/matches/<id>/schedule` — Edit a Scheduled fixture before activation (only allowed when matchStatus is 'Scheduled')
+
+### 10.8 Super Over
+
+| Feature | Implementation |
+|---------|---------------|
+| Team swap | `get_ball_state()` uses `innings in (1, 4)` — innings 4 correctly assigns `team2Name` as batting team |
+| Max balls | `SUPER_OVER_BALLS = 6` legal deliveries per innings (3‑4) |
+| Max wickets | `SUPER_OVER_WICKETS = 2` wickets ends the innings early |
+| Bowler enforcement | `enforce_bowler_rules()` returns `None` for `innings >= 3` (no quota in Super Over) |
+| Scorecard | `lsRefreshStats()` uses `batList`/`bowlList` variables instead of hardcoded `innings1Bat`/`innings2Bat` |
+| Innings tabs | Dynamic tab rendering: innings 1‑2 (normal) or 3‑4 (Super Over) shown based on match data |
+
+---
 
 ## 11. Design System
 
@@ -799,7 +960,7 @@ backdrop-filter: blur(20px);
 
 ### 11.6 Scorecard Tabs
 
-**6 Main Tabs:** 1st Innings Batting, 1st Innings Bowling (placeholder), 2nd Innings Batting, 2nd Innings Bowling (placeholder), Playing XI, Detailed Stats
+**6 Main Tabs (up to 10 for Super Over):** 1st Innings Batting, 1st Innings Bowling, 2nd Innings Batting, 2nd Innings Bowling (plus innings 3‑4 Batting/Bowling for Super Over), Playing XI, Detailed Stats
 
 **Broadcast Batting Table (7 columns):** `Batsman | Dismissal | Runs | Balls | 4s | 6s | SR`
 
@@ -809,15 +970,6 @@ backdrop-filter: blur(20px);
 | Not out | `sc-notout` | Full mint-green `#b9f6ca` bar, dark text |
 | Yet to bat | `sc-dnb` | Dimmed name (0.6 opacity), dash stats |
 
-**Scorecard text sizes:**
-| Element | Size | Font |
-|---------|------|------|
-| Table headers | 0.88rem | Poppins |
-| Player name | 1.05rem | Poppins bold |
-| Dismissal/status | 0.88rem | Poppins |
-| Numbers | 1.15rem | Orbitron bold |
-| Card heading | 1.25rem | Orbitron |
-
 **Detailed Stats (2 sub-tabs):**
 - **Players Performance** → 4 sub-sub-tabs: 1st/2nd Innings Batting (old-style), 1st/2nd Innings Bowling
 - **Ball Log** → over-by-over visual + detailed table
@@ -826,7 +978,7 @@ backdrop-filter: blur(20px);
 
 Below ball entry, centered tab bar (`ls-sc-tab-bat`/`ls-sc-tab-bowl`) switches between panels.
 
-- **Batting card**: uses `renderBatTable()` with `activeIds` + `pendingWicket` opts; same broadcast-style as main tabs
+- **Batting card**: uses `renderBatTable()` with `activeIds` + `pendingWicket` opts
 - **Bowling card**: 6 columns (Bowler, O, M, R, W, Econ); active bowler highlighted
 
 ### 11.8 WK Fielder Tagging
@@ -864,6 +1016,8 @@ Below ball entry, centered tab bar (`ls-sc-tab-bat`/`ls-sc-tab-bowl`) switches b
 | ≤ 900px | Ball entry grid collapses to single column |
 | ≤ 700px | Team roster grid collapses, nav adjusts |
 
+---
+
 ## 12. Key Decisions & Known Issues
 
 ### 12.1 Backend Decisions
@@ -872,7 +1026,8 @@ Below ball entry, centered tab bar (`ls-sc-tab-bat`/`ls-sc-tab-bowl`) switches b
 - **`get_db()` per request**: Fresh connection per request, auto-commits via `with`
 - **`requires_admin` decorator**: Wraps routes to check `user['isAdmin']`
 - **`enforce_bowler_rules()`**: Server-side validation for consecutive overs + max overs per format
-- **`save_match_state()`**: Persists striker/non-striker/bowler to `MatchState` after every ball
+- **`save_match_state()`**: Persists striker/non-striker/bowler/freeHitPending to `MatchState` after every ball (line 2625)
+- **`get_ball_state()`**: Returns complete match context including playing XI with selectable/disabled flags, derived batting/bowling team from toss data, and free hit state (line 2420)
 
 ### 12.2 Frontend Decisions
 
@@ -880,20 +1035,22 @@ Below ball entry, centered tab bar (`ls-sc-tab-bat`/`ls-sc-tab-bowl`) switches b
 - **`authFetch()`**: Wrapper adding `Authorization: Bearer <token>`
 - **`window.DataSync`**: BroadcastChannel with localStorage fallback for cross-tab sync
 - **`pendingNewBatter` block**: Local flag prevents ball entry until new batter selected after wicket
+- **Tournament Wizard**: Multi-step modal for tournament creation with schedule preview
 
 ### 12.3 Known Issues / Tech Debt
 
 **Critical:**
-1. **`seed_data.py` missing venues/umpires**: `/api/seed` endpoint will crash on first run
+1. **`seed_data.py` missing venues/umpires**: `/api/seed` endpoint will crash on first run if venues/umpires are needed. These must be populated separately.
 2. **No CSRF protection**: Token-based auth via localStorage, no CSRF tokens
 
 **Moderate:**
-3. **`lsRefreshStats` uses plain `fetch`**: No auth header, relies on `?_t=` cache-busting
-4. **`dummy.png` and `player-placeholder.svg`**: Two different fallback systems for player images
+3. **`dummy.png` and `player-placeholder.svg`**: Two different fallback systems for player images
 
 **Low:**
-5. **Inline styles**: Many components use extensive inline styles rather than CSS classes
-6. **No password hashing migration**: Older accounts may have plaintext passwords (new ones use Werkzeug hashing)
+4. **Inline styles**: Many components use extensive inline styles rather than CSS classes
+5. **No password hashing migration**: Older accounts may have plaintext passwords (new ones use Werkzeug hashing)
+
+---
 
 ## 13. Running the App
 
@@ -909,5 +1066,37 @@ Navigate to: `http://localhost:5001/login.html`
 ```bash
 python reset_db.py
 python app.py
-# Then hit /api/seed (note: will fail on venues/umpires due to seed_data bug)
+# Then hit /api/seed (note: venues/umpires must be populated manually)
 ```
+
+---
+
+## 14. Recent Fixes
+
+### 14.1 Venue/Umpire NOT NULL on Tournament Match Creation
+**Problem:** `generate_tournament()` in `tournaments.js` created matches with `venueID=NULL`, `onFieldUmpire1ID=NULL`, `onFieldUmpire2ID=NULL`, but the actual database schema (from `init_db()` migrations) has these columns as `NOT NULL`.
+
+**Fix:** Updated `generate_tournament()` in `tournaments.js` to:
+1. Fetch venues from `GET /api/venues` before generating matches
+2. Fetch umpires from `GET /api/umpires` before generating matches
+3. Cycle through available venues and umpires: `venueID = (i % venues.length) + 1`, `onFieldUmpire1ID = (i % umpires.length) + 1`, `onFieldUmpire2ID = ((i + 1) % umpires.length) + 1`
+
+### 14.2 `free_hit_pending` Undefined in `get_ball_state()`
+**Problem:** The `get_ball_state()` function (line 2420) referenced `free_hit_pending` but never defined the variable, causing a `NameError` → HTTP 500 error. This prevented the frontend from loading batter/bowler selection lists, resulting in empty dropdowns ("No batters available" / "No eligible bowlers").
+
+**Fix:** Updated the MatchState query at line 2502 to include `freeHitPending`:
+```python
+SELECT strikerID, nonStrikerID, bowlerID, freeHitPending FROM MatchState
+WHERE matchID=? AND inningsNumber=?
+```
+And added the variable assignment:
+```python
+free_hit_pending = bool(state_row['freeHitPending']) if state_row and state_row['freeHitPending'] else False
+```
+
+### 14.3 Status
+After both fixes, the server must be restarted for changes to take effect. Verify with:
+```bash
+curl http://localhost:5001/api/balls/state/2001?innings=1
+```
+This should return valid JSON with 22 players in `battingOptions` and `bowlingOptions`.

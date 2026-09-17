@@ -47,60 +47,47 @@
                     <li><a href="matches.html" class="nav-link">📋 Matches</a></li>
                     <li><a href="players.html" class="nav-link">🏏 Players</a></li>
                     <li><a href="teams.html" class="nav-link">🛡️ Teams</a></li>
+                    <li><a href="rankings.html" class="nav-link">📈 Rankings</a></li>
+                    <li><a href="records.html" class="nav-link">🏅 Records</a></li>
                     <li><a href="stats.html" class="nav-link">🤖 AI Stats</a></li>
                 </ul>
             </div>
         </nav>
 
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+        <header class="page-hero">
             <div>
-                <h1 style="font-size:1.6rem; font-weight:800; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
-                    🌍 Tournaments
-                </h1>
-                <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.2rem;">Manage and view tournaments</p>
+                <h1 class="page-hero-title">🏆 Tournaments</h1>
+                <p class="page-hero-sub">Manage and view tournaments — schedules, brackets, and standings.</p>
             </div>
-            <button class="btn btn-primary glow-box admin-only" onclick="toggleForm()">+ Create Tournament</button>
-        </div>
+            <div class="page-hero-actions">
+                <button class="btn btn-primary glow-box btn-inline admin-only" onclick="openWizardModal()">+ Create Tournament</button>
+            </div>
+        </header>
 
-        <!-- FORM -->
-        <div id="form-section" class="glass-card" style="display:none; margin-bottom:1.5rem;">
-            <h3>Create New Tournament</h3>
-            <form id="tournament-form" onsubmit="saveTournament(event)">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Tournament Name</label>
-                        <input type="text" id="t-name" class="form-input" required placeholder="e.g. World Cup 2027">
-                    </div>
-                    <div class="form-group">
-                        <label>Format</label>
-                        <select id="t-format" class="form-input" required>
-                            <option value="T20">T20</option>
-                            <option value="ODI">ODI</option>
-                            <option value="TEST">TEST</option>
-                            <option value="T10">T10</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Total Teams</label>
-                        <input type="number" id="t-total" class="form-input" required min="2">
-                    </div>
-                    <div class="form-group">
-                        <label>Overs per Innings</label>
-                        <input type="number" id="t-overs" class="form-input" required min="1">
+        
+        <!-- SCHEDULE / BRACKET VIEW -->
+        <section class="glass-card tourney-schedule-shell" style="margin-bottom:1.5rem;">
+            <div class="section-head" style="margin-bottom:1rem;">
+                <div>
+                    <h3 style="margin:0;">📅 Tournament Schedule & Hierarchy</h3>
+                    <p style="color:var(--text-muted); font-size:0.9rem; margin-top:0.35rem;">Match boxes by stage · visual bracket tree</p>
+                </div>
+                <div style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center;">
+                    <select id="schedule-tournament" class="form-input" style="min-width:220px;" onchange="renderScheduleBoard()"></select>
+                    <div class="filter-tabs" id="schedule-view-tabs">
+                        <button type="button" class="filter-btn active" data-view="schedule" onclick="setScheduleView('schedule', this)">Schedule</button>
+                        <button type="button" class="filter-btn" data-view="tree" onclick="setScheduleView('tree', this)">Tree</button>
                     </div>
                 </div>
-                <div class="form-group" style="margin-top:1rem;">
-                    <label style="margin-bottom: 0.5rem; display: block;">Select Teams <span style="color:var(--text-muted); font-size: 0.8rem; font-weight: normal;">(Click to select)</span></label>
-                    <div id="t-teams-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.8rem;">
-                        <!-- Checkboxes injected by JS -->
-                    </div>
-                </div>
-                <div style="margin-top:1rem; text-align:right;">
-                    <button type="button" class="btn" onclick="toggleForm()" style="background:var(--bg-surface); border:1px solid #333; margin-right:10px;">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Tournament</button>
-                </div>
-            </form>
-        </div>
+            </div>
+            <div id="schedule-board" class="schedule-board">
+                <div class="empty-state soft-empty">Select a tournament to view its schedule.</div>
+            </div>
+            <div id="bracket-board" class="bracket-board" style="display:none;"></div>
+        </section>
+
+<!-- Hidden legacy grid kept for backward-compatible helpers -->
+        <div id="t-teams-grid" style="display:none;"></div>
 
         <!-- LIST -->
         <div class="glass-card glow-box">
@@ -110,10 +97,11 @@
                     <thead>
                         <tr>
                             <th>Tournament Name</th>
+                            <th>Type</th>
                             <th>Format</th>
-                            <th>Total Teams</th>
+                            <th>Teams</th>
                             <th>Overs</th>
-                            <th>Participating Teams</th>
+                            <th>Progress</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -129,10 +117,11 @@
                     <thead>
                         <tr>
                             <th>Tournament Name</th>
+                            <th>Type</th>
                             <th>Format</th>
-                            <th>Total Teams</th>
+                            <th>Teams</th>
                             <th>Overs</th>
-                            <th>Participating Teams</th>
+                            <th>Champion</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -145,17 +134,19 @@
 
     <!-- SQUAD SELECTION MODAL -->
     <div id="squadModal" class="modal-overlay" style="display:none; z-index: 1000;">
-        <div class="modal-card glass-card" style="max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto;">
-            <div class="modal-header">
-                <h3 id="squadModalTitle">Select Squads for Tournament</h3>
+        <div class="modal-card glass-card" style="max-width: 900px; width: 94%; max-height: 90vh; display:flex; flex-direction:column;">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 id="squadModalTitle">Manage Squads</h3>
+                <button onclick="document.getElementById('squadModal').style.display='none'" style="background:transparent; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">×</button>
             </div>
-            
-            <div id="squadModalContent">
+            <p class="modal-hint" style="margin:0.4rem 0;">Squads are optional and can be finalised any time. Pick up to 16 players (11–16 recommended). Use <b>Skip</b> to leave a team for later.</p>
+
+            <div id="squadModalContent" style="overflow-y:auto;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
                     <h4 id="squadTeamName" style="color:var(--primary-light); font-size:1.2rem;">Team Name</h4>
-                    <span id="squadCounter" style="color:var(--text-muted); font-size: 0.9rem;">Selected: 0/16</span>
+                    <span id="squadCounter" style="color:var(--text-muted); font-size: 0.9rem;">Selected: 0 / 16 max</span>
                 </div>
-                
+
                 <div id="squadPlayersGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
                     <!-- Checkboxes will go here -->
                 </div>
@@ -163,7 +154,10 @@
 
             <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
                 <span id="squadTeamProgress" style="color:var(--text-muted); font-size: 0.9rem;">Team 1 of X</span>
-                <button type="button" class="btn btn-primary" id="btnSquadNext" onclick="nextSquadTeam()">Next Team ➔</button>
+                <div style="display:flex; gap:0.5rem;">
+                    <button type="button" class="btn-cancel" onclick="skipSquadTeam()">Skip</button>
+                    <button type="button" class="btn btn-primary btn-submit" id="btnSquadNext" onclick="nextSquadTeam()">Next Team ➔</button>
+                </div>
             </div>
         </div>
     </div>
@@ -179,18 +173,219 @@
             </div>
         </div>
     </div>
-    <!-- STANDINGS MODAL -->
-    <div id="standingsModal" class="modal-overlay" style="display:none; z-index:1000;">
-        <div class="modal-card glass-card" style="max-width:850px; width:95%; max-height:90vh; display:flex; flex-direction:column;">
-            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
-                <h3 id="standingsTitle">Tournament Standings</h3>
-                <button onclick="document.getElementById('standingsModal').style.display='none'" style="background:transparent; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">&times;</button>
-            </div>
-            <div id="standingsContent" style="overflow-y:auto; padding-top:1rem;"></div>
+    <!-- STANDINGS MODAL (Points Table + NRR) -->
+    <div id="standings-modal" class="modal-overlay" style="display:none; z-index:1000;">
+      <div class="modal-card glass-card" style="max-width:700px; width:95%; max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 class="modal-title" id="standings-tournament-name" style="margin:0;"></h3>
+          <button onclick="document.getElementById('standings-modal').style.display='none'" style="background:transparent; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">&times;</button>
         </div>
+        <div style="overflow-y:auto; padding-top:1rem;">
+          <div class="standings-legend"><span class="legend-qualifies">■</span> Qualify for knockouts</div>
+          <!-- Per-pool tables (only rendered for pool-format tournaments) -->
+          <div id="standings-pools"></div>
+          <div id="standings-overall-wrap">
+            <div id="standings-overall-title" class="standings-section-title" style="display:none;">Overall</div>
+            <div style="overflow-x:auto">
+              <table class="standings-table">
+                <thead>
+                  <tr>
+                    <th>#</th><th>Team</th>
+                    <th title="Played">P</th>
+                    <th title="Won" style="color:var(--neon-green)">W</th>
+                    <th title="Lost" style="color:var(--red-ball)">L</th>
+                    <th title="No Result / Tied" style="color:var(--gold)">NR</th>
+                    <th title="Points" style="color:var(--primary-light)">Pts</th>
+                    <th title="Net Run Rate">NRR</th>
+                  </tr>
+                </thead>
+                <tbody id="standings-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="standings-nrr-note">NRR = (Runs scored ÷ Overs faced) − (Runs conceded ÷ Overs bowled). Calculated from ball-by-ball data. Only completed matches count.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOURNAMENT BRACKET MODAL -->
+    <div id="bracket-modal" class="modal-overlay" style="display:none; z-index:1000;">
+      <div class="modal-card glass-card" style="max-width:900px; width:95%; max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 class="modal-title" id="bracket-tournament-name" style="margin:0;">Tournament Bracket</h3>
+          <button onclick="document.getElementById('bracket-modal').style.display='none'" style="background:transparent; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+        <div id="bracket-container" class="bracket-container" style="overflow:auto;"></div>
+      </div>
+    </div>
+
+    <!-- TOURNAMENT POOLS MODAL -->
+    <div id="pools-modal" class="modal-overlay" style="display:none; z-index:1000;">
+      <div class="modal-card glass-card" style="max-width:820px; width:95%; max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 class="modal-title" id="pools-tournament-name" style="margin:0;">Pools</h3>
+          <button onclick="document.getElementById('pools-modal').style.display='none'" style="background:transparent; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+        <div id="pools-body" class="pools-body" style="overflow-y:auto; padding-top:1rem;"></div>
+      </div>
+    </div>
+
+    <!-- TOURNAMENT CREATION WIZARD MODAL -->
+    <div id="tournament-wizard-modal" class="modal-overlay" style="display:none; z-index:1000;">
+      <div class="modal-card glass-card wizard-modal-card">
+        <div class="wizard-header">
+          <h2 class="wizard-heading">🏆 Create Tournament</h2>
+          <button class="wizard-close" onclick="closeWizardModal()" title="Close">×</button>
+        </div>
+        <div class="wizard-progress"><div class="wizard-progress-bar" id="wizard-progress-bar"></div></div>
+        <div class="wizard-steps-labels">
+          <span data-step="1">1 · Details</span><span data-step="2">2 · Teams</span>
+          <span data-step="3">3 · Schedule</span><span data-step="4">4 · Review</span>
+        </div>
+
+        <div class="wizard-body">
+          <!-- Step 1 -->
+          <div class="wizard-step wizard-active" id="wizard-step-1">
+            <h3 class="modal-title">Tournament Details</h3>
+            <p class="modal-hint">Only the essentials — squads, venues and umpires are all set up later.</p>
+            <div class="form-group">
+              <label>Tournament Name <span class="required">*</span></label>
+              <input type="text" id="wiz-name" class="form-input" placeholder="e.g. Asia Cup 2026" oninput="wizardState.name=this.value">
+            </div>
+            <div class="form-group">
+              <label>Is this a… <span class="required">*</span></label>
+              <div class="btn-group-toggle" id="wiz-sot-group">
+                <button type="button" class="filter-btn" data-sot="Series" onclick="setSeriesOrTournament('Series', this)">🤝 Series</button>
+                <button type="button" class="filter-btn" data-sot="Tournament" onclick="setSeriesOrTournament('Tournament', this)">🏆 Tournament</button>
+              </div>
+              <small class="field-help">Series = a short 2–4 team contest · Tournament = 5+ teams with a knockout stage.</small>
+            </div>
+            <div id="series-subtype" style="display:none;">
+              <div class="form-group">
+                <label>Series Type <span class="required">*</span></label>
+                <div class="btn-group-toggle" id="wiz-seriestype-group">
+                  <button type="button" class="filter-btn" data-tt="Bilateral" onclick="setTournamentType('Bilateral', this)">Bilateral · 2</button>
+                  <button type="button" class="filter-btn" data-tt="Tri" onclick="setTournamentType('Tri', this)">Tri · 3</button>
+                  <button type="button" class="filter-btn" data-tt="Quad" onclick="setTournamentType('Quad', this)">Quad · 4</button>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Match Format <span class="required">*</span></label>
+              <select id="wiz-format" class="form-input" onchange="wizardState.format=this.value; wizardState.overs=getDefaultOvers(this.value)">
+                <option value="T20">T20 — 20 overs</option><option value="T10">T10 — 10 overs</option>
+                <option value="ODI">ODI — 50 overs</option><option value="TEST">TEST</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="wizard-step" id="wizard-step-2">
+            <h3 class="modal-title">Select Teams</h3>
+            <p class="modal-hint" id="team-selection-hint"></p>
+            <div id="wiz-teams-grid" class="teams-checkbox-grid"></div>
+            <p class="selection-counter">Selected: <span id="team-count">0</span></p>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="wizard-step" id="wizard-step-3">
+            <h3 class="modal-title">Schedule Format</h3>
+            <p class="modal-hint">Pick how the fixtures are generated. You can fine-tune dates and matches on the next step and edit everything later.</p>
+            <div id="bilateral-controls" style="display:none;">
+              <div class="form-group">
+                <label>Number of Matches (1–5)</label>
+                <input type="number" class="form-input" min="1" max="5" value="3" oninput="wizardState.numMatches=parseInt(this.value)||3; updateMatchCountPreview()">
+              </div>
+            </div>
+            <div id="multiteam-controls">
+              <div id="pool-toggle-wrap" class="wizard-inline-toggle" style="display:none;">
+                <label class="switch-label"><input type="checkbox" id="wiz-use-pools" onchange="toggleUsePools(this)"> Split into two pools (Group A / Group B)</label>
+              </div>
+              <div id="schedule-format-grid" class="fmt-grid"></div>
+              <div id="double-rr-wrap" class="wizard-inline-toggle" style="display:none;">
+                <label class="switch-label"><input type="checkbox" id="wiz-double-rr" onchange="toggleDoubleRR(this)"> Double round robin (home &amp; away)</label>
+              </div>
+              <p class="match-count-preview" id="match-count-preview"></p>
+            </div>
+          </div>
+
+          <!-- Step 4 -->
+          <div class="wizard-step" id="wizard-step-4">
+            <h3 class="modal-title">Review &amp; Publish</h3>
+            <p class="modal-hint">Dates are optional — leave blank to keep them TBD. Knockout teams stay “TBD” until the group stage finishes.</p>
+            <p class="match-count-preview" id="schedule-preview-summary"></p>
+            <div class="schedule-preview-wrapper">
+              <table class="schedule-preview-table">
+                <thead><tr><th>#</th><th>Team 1</th><th></th><th>Team 2</th><th>Type</th><th>Group</th><th>Date (optional)</th></tr></thead>
+                <tbody id="schedule-preview-tbody"></tbody>
+              </table>
+            </div>
+            <div class="form-group" style="margin-top:1rem;">
+              <label>Qualification Rules (optional)</label>
+              <textarea id="wiz-qual-rules" class="form-input" rows="2" placeholder="e.g. Top 2 teams by points qualify for the Final. NRR breaks ties."></textarea>
+            </div>
+            <div class="wizard-next-note">✅ After creating, use <b>Manage Squads</b> on the dashboard to add 11–16 players per team whenever you're ready.</div>
+          </div>
+        </div>
+
+        <div class="wizard-nav">
+          <button class="btn-cancel" id="wizard-back-btn" onclick="wizardBack()" style="display:none;">← Back</button>
+          <button class="btn-cancel" onclick="closeWizardModal()">Cancel</button>
+          <button class="btn-submit" id="wizard-next-btn" onclick="wizardNext()">Next →</button>
+          <button class="btn-submit" id="wizard-submit-btn" onclick="submitTournamentWizard()" style="display:none;">Create Tournament</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EDIT TOURNAMENT DETAILS MODAL -->
+    <div id="edit-details-modal" class="modal-overlay" style="display:none; z-index:1000;">
+      <div class="modal-card glass-card" style="max-width:520px; width:95%;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 class="modal-title" id="edit-det-title" style="margin:0;">Edit Tournament</h3>
+          <button onclick="closeEditDetails()" style="background:transparent; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">×</button>
+        </div>
+        <div style="padding-top:1rem;">
+          <div class="form-group"><label>Match Format</label>
+            <select id="edit-det-format" class="form-input">
+              <option value="T20">T20</option><option value="T10">T10</option>
+              <option value="ODI">ODI</option><option value="TEST">TEST</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Overs</label>
+            <input type="number" id="edit-det-overs" class="form-input" min="1" max="90"></div>
+          <div class="form-group"><label>Qualification Rules</label>
+            <textarea id="edit-det-qual" class="form-input" rows="3" placeholder="e.g. Top 4 advance to playoffs."></textarea></div>
+          <div class="modal-actions" style="margin-top:1rem; display:flex; gap:0.6rem; justify-content:flex-end;">
+            <button class="btn-cancel" onclick="closeEditDetails()">Cancel</button>
+            <button class="btn-submit" onclick="saveEditDetails()">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EDIT SCHEDULE MODAL -->
+    <div id="edit-schedule-modal" class="modal-overlay" style="display:none; z-index:1000;">
+      <div class="modal-card glass-card" style="max-width:920px; width:96%; max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 class="modal-title" id="edit-sched-title" style="margin:0;">Edit Schedule</h3>
+          <button onclick="closeEditSchedule()" style="background:transparent; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">×</button>
+        </div>
+        <p class="modal-hint" style="margin:0.5rem 0;">Scheduled matches can be re-teamed, re-typed, re-dated, added or removed. Live/completed matches are locked.</p>
+        <div style="display:flex; gap:0.6rem; align-items:center; margin-bottom:0.8rem; flex-wrap:wrap;">
+          <select id="add-sched-type" class="form-input" style="max-width:220px;">
+            <option value="Group-Stage">Group-Stage</option><option value="League">League</option>
+            <option value="Semi-Final">Semi-Final</option><option value="Final">Final</option>
+            <option value="Play-off">Play-off</option><option value="Qualifier-1">Qualifier-1</option>
+            <option value="Qualifier-2">Qualifier-2</option><option value="Eliminator">Eliminator</option>
+          </select>
+          <button class="btn-submit" onclick="addSchedMatch()">+ Add Match</button>
+        </div>
+        <div id="edit-sched-list" style="overflow-y:auto; display:flex; flex-direction:column; gap:0.5rem;"></div>
+      </div>
     </div>
 
     <script src="tournaments.js"></script>
     <button id="scroll-top-btn" class="scroll-top-btn" title="Back to top">↑</button>
+    <script src="enhance.js"></script>
 </body>
 </html>

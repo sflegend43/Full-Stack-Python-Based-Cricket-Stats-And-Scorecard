@@ -210,7 +210,7 @@ function renderPlayers(groupedPlayers, totalCount) {
 
             html += `
             <div class="player-card role-${rc}">
-                <div class="pc-hero">
+                <div class="pc-hero" style="cursor:pointer;" onclick="openPlayerProfile('${p.playerID}')" title="View profile">
                     <img class="pc-hero-img" src="${avatarUrl}" alt="${p.playerName}"
                          onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='${cropUrl}'}else{this.src='${placeholder}'}">
                     <span class="pc-role-badge">${ROLE_EMOJI[p.playerRole] || '🏏'} ${p.playerRole}</span>
@@ -233,6 +233,10 @@ function renderPlayers(groupedPlayers, totalCount) {
                         <div class="pc-info-row">
                             <span class="pc-info-label">Bowling</span>
                             <span class="pc-info-value">${p.bowlingStyle || '—'}</span>
+                        </div>
+                        <div class="pc-info-row">
+                            <span class="pc-info-label">Bat Order</span>
+                            <span class="pc-info-value">${p.battingOrder || 'Middle Order'}</span>
                         </div>
                     </div>
                     <div class="pc-actions">
@@ -308,6 +312,7 @@ function openEditModal(pid) {
     document.getElementById('edit-bat').value  = p.battingStyle || '';
     document.getElementById('edit-bowl').value = p.bowlingStyle || '';
     document.getElementById('edit-role').value = p.playerRole;
+    document.getElementById('edit-batting-order').value = p.battingOrder || 'Middle Order';
     document.getElementById('editModal').style.display = 'flex';
 }
 
@@ -349,6 +354,7 @@ function setupForms() {
             battingStyle:      document.getElementById('add-bat').value,
             bowlingStyle:      document.getElementById('add-bowl').value.trim(),
             playerRole:        document.getElementById('add-role').value,
+            battingOrder:      document.getElementById('add-batting-order').value,
             teamName:          selectedTeam
         };
         try {
@@ -378,6 +384,7 @@ function setupForms() {
             battingStyle:      document.getElementById('edit-bat').value,
             bowlingStyle:      document.getElementById('edit-bowl').value.trim(),
             playerRole:        document.getElementById('edit-role').value,
+            battingOrder:      document.getElementById('edit-batting-order').value,
         };
         try {
             const res  = await authFetch(`${API}/api/players/${pid}`, {
@@ -428,4 +435,140 @@ function customConfirm(msg) {
             resolve(true);
         };
     });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// PLAYER PROFILE VIEW (grid ↔ profile)
+// ═══════════════════════════════════════════════════════════════════
+let profileCharts = {};
+let currentProfileTeam = '';
+
+function playerFlagImg(nationality, size = 22) {
+    const c = getCountryCode(nationality);
+    return c ? `<img src="https://flagcdn.com/w40/${c}.png" width="${size}" alt="" onerror="this.style.display='none'">` : '🏏';
+}
+
+async function openPlayerProfile(playerId) {
+    document.getElementById('players-browse-view').style.display = 'none';
+    document.getElementById('player-profile-view').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    try {
+        const res = await authFetch(`${API}/api/players/${playerId}/career`);
+        const data = await res.json();
+        const p = data.player;
+        currentProfileTeam = '';
+        if (data.recentMatches && data.recentMatches.length) {
+            currentProfileTeam = data.recentMatches[0].playerTeam || '';
+        }
+
+        document.getElementById('profile-name').textContent = p.playerName;
+        const photo = document.getElementById('profile-photo');
+        photo.src = `Players Pics/${p.playerName}.png`;
+        photo.onerror = function () { this.onerror = null; this.src = 'dummy.png'; };
+        document.getElementById('profile-flag').innerHTML = playerFlagImg(p.playerNationality, 22);
+        document.getElementById('profile-nationality').textContent = p.playerNationality || '';
+        document.getElementById('profile-role-badge').innerHTML =
+            `<span class="badge badge-t20">${(ROLE_EMOJI[p.playerRole] || '🏏')} ${p.playerRole}</span>`;
+        document.getElementById('profile-bat-style').textContent = p.battingStyle ? `🏏 ${p.battingStyle}` : '';
+        document.getElementById('profile-bowl-style').textContent = p.bowlingStyle ? `🎯 ${p.bowlingStyle}` : '';
+
+        const bat = data.careerTotals.batting || {};
+        const bowl = data.careerTotals.bowling || {};
+        document.getElementById('profile-runs').textContent = bat.totalRuns || 0;
+        document.getElementById('profile-wickets').textContent = bowl.wickets || 0;
+        document.getElementById('profile-matches').textContent = bat.matches || 0;
+        document.getElementById('profile-fifties').textContent = bat.fifties || 0;
+
+        renderProfileBattingChart(data.battingYearly);
+        renderProfileBattingTable(data.battingYearly);
+        renderProfileBowlingChart(data.bowlingYearly);
+        renderProfileBowlingTable(data.bowlingYearly);
+        renderProfileMatches(data.recentMatches);
+        switchProfileTab('batting');
+    } catch {
+        showToast ? showToast('Failed to load profile', 'error') : alert('Failed to load profile');
+        closePlayerProfile();
+    }
+}
+
+function closePlayerProfile() {
+    document.getElementById('player-profile-view').style.display = 'none';
+    document.getElementById('players-browse-view').style.display = 'block';
+    Object.values(profileCharts).forEach(c => { try { c.destroy(); } catch {} });
+    profileCharts = {};
+}
+
+function switchProfileTab(tab) {
+    document.getElementById('profile-batting-panel').style.display = tab === 'batting' ? 'block' : 'none';
+    document.getElementById('profile-bowling-panel').style.display = tab === 'bowling' ? 'block' : 'none';
+    document.getElementById('profile-matches-panel').style.display = tab === 'matches' ? 'block' : 'none';
+    ['batting', 'bowling', 'matches'].forEach(t => {
+        const b = document.getElementById(`ptab-${t}`);
+        if (b) b.classList.toggle('active', t === tab);
+    });
+}
+
+const CHART_AXES = {
+    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.04)' } },
+    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+};
+
+function renderProfileBattingChart(yearly) {
+    if (profileCharts.batting) profileCharts.batting.destroy();
+    const ctx = document.getElementById('profile-batting-chart').getContext('2d');
+    profileCharts.batting = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: yearly.map(r => r.year), datasets: [{ label: 'Runs', data: yearly.map(r => r.runs || 0),
+            backgroundColor: 'rgba(34,197,94,0.4)', borderColor: 'rgba(34,197,94,0.9)', borderWidth: 2, borderRadius: 6 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: CHART_AXES }
+    });
+}
+function renderProfileBattingTable(yearly) {
+    document.getElementById('profile-batting-tbody').innerHTML = yearly.map(r => {
+        const sr = r.balls > 0 ? ((r.runs / r.balls) * 100).toFixed(1) : '—';
+        return `<tr><td>${r.year}</td><td>${r.innings}</td>
+            <td style="color:var(--neon-green); font-weight:700;">${r.runs || 0}</td>
+            <td>${r.highScore || 0}</td><td>${r.balls || 0}</td><td>${sr}</td>
+            <td>${r.fours || 0}</td><td style="color:var(--gold)">${r.sixes || 0}</td>
+            <td style="color:var(--red-ball)">${r.ducks || 0}</td></tr>`;
+    }).join('') || '<tr><td colspan="9" style="color:var(--text-muted); padding:1rem;">No batting data yet.</td></tr>';
+}
+function renderProfileBowlingChart(yearly) {
+    if (profileCharts.bowling) profileCharts.bowling.destroy();
+    const ctx = document.getElementById('profile-bowling-chart').getContext('2d');
+    profileCharts.bowling = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: yearly.map(r => r.year), datasets: [{ label: 'Wickets', data: yearly.map(r => r.wickets || 0),
+            backgroundColor: 'rgba(239,68,68,0.4)', borderColor: 'rgba(239,68,68,0.9)', borderWidth: 2, borderRadius: 6 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: CHART_AXES }
+    });
+}
+function renderProfileBowlingTable(yearly) {
+    document.getElementById('profile-bowling-tbody').innerHTML = yearly.map(r => {
+        const overs = Math.floor((r.balls || 0) / 6) + '.' + ((r.balls || 0) % 6);
+        const econ = r.balls > 0 ? ((r.runs / r.balls) * 6).toFixed(2) : '—';
+        return `<tr><td>${r.year}</td><td>${r.matches || 0}</td><td>${overs}</td>
+            <td>${r.runs || 0}</td><td style="color:var(--neon-green); font-weight:700;">${r.wickets || 0}</td>
+            <td>${econ}</td></tr>`;
+    }).join('') || '<tr><td colspan="6" style="color:var(--text-muted); padding:1rem;">No bowling data yet.</td></tr>';
+}
+function renderProfileMatches(matches) {
+    document.getElementById('profile-matches-tbody').innerHTML = (matches || []).map(m => {
+        const team = m.playerTeam || currentProfileTeam;
+        const opponent = m.team1Name === team ? m.team2Name : m.team1Name;
+        let result = 'N', color = 'var(--gold)';
+        if (m.winnerName) {
+            if (m.winnerName === team) { result = '✓ W'; color = 'var(--neon-green)'; }
+            else { result = '✗ L'; color = 'var(--red-ball)'; }
+        }
+        return `<tr>
+            <td>${m.matchDate || 'TBD'}</td>
+            <td style="font-size:0.8rem; color:var(--text-muted);">${m.tournamentName || '—'}</td>
+            <td><span class="badge badge-t20">${m.matchFormat}</span></td>
+            <td>${(opponent || '—').replace(' Cricket Team','')}</td>
+            <td>${m.runsScored ?? '—'} (${m.ballsFaced ?? '—'})</td>
+            <td style="color:var(--red-ball)">${m.wicketsTaken ?? '—'}</td>
+            <td style="color:${color}; font-weight:700;">${result}</td></tr>`;
+    }).join('') || '<tr><td colspan="7" style="color:var(--text-muted); padding:1rem;">No match history.</td></tr>';
 }

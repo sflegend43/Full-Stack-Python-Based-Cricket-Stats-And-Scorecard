@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="cricket_anim.css">
     <script>if (!localStorage.getItem('cricketUser')) window.location.href = 'login.html';</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="transitions.js"></script>
 </head>
 <body>
@@ -31,7 +32,7 @@
                 <div class="nav-center">
                     <div class="ai-pill">
                         <span class="ai-badge">AI INSIGHT</span>
-                        <span class="ai-text" id="ai-insight-text">Loading predictions...</span>
+                        <span class="ai-text" id="ai-insight-text">Compare players, teams & head-to-heads</span>
                     </div>
                 </div>
                 <div class="nav-right">
@@ -49,25 +50,25 @@
                     <li><a href="matches.html" class="nav-link active">📋 Matches</a></li>
                     <li><a href="players.html" class="nav-link">🏏 Players</a></li>
                     <li><a href="teams.html" class="nav-link">🛡️ Teams</a></li>
+                    <li><a href="rankings.html" class="nav-link">📈 Rankings</a></li>
+                    <li><a href="records.html" class="nav-link">🏅 Records</a></li>
                     <li><a href="stats.html" class="nav-link">🤖 AI Stats</a></li>
                 </ul>
             </div>
         </nav>
 
-        <!-- MATCH LIST VIEW -->
-        <div id="list-view">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
-                <div>
-                    <h1 style="font-size:1.6rem; font-weight:800; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
-                        📋 Match Centre
-                    </h1>
-                    <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.2rem;" id="match-count-label">Loading matches…</p>
-                </div>
-                <button class="btn-submit admin-only" style="width:auto; padding:0.6rem 1.4rem;" onclick="openAddMatchModal()">
-                    ➕ Add Match
-                </button>
+        
+        <header class="page-hero">
+            <div>
+                <h1 class="page-hero-title">📋 Matches</h1>
+                <p class="page-hero-sub" id="match-count-label">Scorecards, playing XIs, and live ball-by-ball entry.</p>
             </div>
-
+            <div class="page-hero-actions">
+                <button class="btn-submit btn-inline admin-only" onclick="openActivateMatchWizard()">⚡ Activate Match</button>
+            </div>
+        </header>
+<!-- MATCH LIST VIEW -->
+        <div id="list-view">
             <div class="filter-nav">
                 <button class="filter-btn active" onclick="setFormatFilter(this, '')">All Formats</button>
                 <button class="filter-btn" onclick="setFormatFilter(this, 'T20')">T20</button>
@@ -81,6 +82,7 @@
                     <table>
                         <thead>
                             <tr>
+                                <th>#</th>
                                 <th>Tournament</th>
                                 <th>Format</th>
                                 <th>Type</th>
@@ -105,14 +107,31 @@
                 <button class="filter-btn" onclick="backToList()">← Back to Matches</button>
                 <button class="btn-submit admin-only" style="width:auto; padding:0.5rem 1.2rem;" onclick="openBallEntry()">🏏 Enter Ball</button>
             </div>
+            <!-- Top-level mode: ABOVE score vs score -->
+            <div class="sc-mode-tabs" role="tablist" aria-label="Match view mode">
+                <button type="button" class="sc-mode-tab active" id="sc-mode-overview-btn"
+                        onclick="switchScorecardMode('overview')">📡 Overview</button>
+                <button type="button" class="sc-mode-tab" id="sc-mode-details-btn"
+                        onclick="switchScorecardMode('details')">📋 Scorecard & Details</button>
+            </div>
+
             <div id="scorecard-header-box"></div>
 
+            <!-- OVERVIEW MODE (default) -->
+            <div id="sc-mode-overview">
+                <div id="match-overview-box" class="match-overview" style="display:none;"></div>
+            </div>
+
+            <!-- SCORECARD & DETAILS MODE -->
+            <div id="sc-mode-details" style="display:none;">
             <!-- Main Scorecard Tabs -->
             <div class="innings-tab-group">
                 <button class="innings-tab active" id="tab-inn1"    onclick="switchInnings('inn1')">🏏 1st Innings Batting</button>
                 <button class="innings-tab" id="tab-bowl1"          onclick="switchInnings('bowl1')">🎯 1st Innings Bowling</button>
                 <button class="innings-tab" id="tab-inn2"           onclick="switchInnings('inn2')">🏏 2nd Innings Batting</button>
                 <button class="innings-tab" id="tab-bowl2"          onclick="switchInnings('bowl2')">🎯 2nd Innings Bowling</button>
+                <button class="innings-tab" id="tab-so1"            style="display:none;" onclick="switchInnings('so1')">⚡ Super Over 1</button>
+                <button class="innings-tab" id="tab-so2"            style="display:none;" onclick="switchInnings('so2')">⚡ Super Over 2</button>
                 <button class="innings-tab" id="tab-xi"             onclick="switchInnings('xi')">👥 Playing XI</button>
                 <button class="innings-tab" id="tab-details"        onclick="switchInnings('details')">📊 Detailed Stats</button>
             </div>
@@ -128,11 +147,14 @@
                 </div>
             </div>
 
-            <!-- ═══ 1st Innings Bowling (Placeholder) ═══ -->
+            <!-- ═══ 1st Innings Bowling ═══ -->
             <div id="bowl1-card" class="glass-card" style="display:none;">
-                <div style="text-align:center; padding:3rem 1rem; color:var(--text-muted);">
-                    <div style="font-size:2rem; margin-bottom:0.5rem;">🎯</div>
-                    <p style="font-size:1rem;">1st Innings Bowling — coming soon</p>
+                <h3 style="margin-bottom:1rem;">🎯 1st Innings — Bowling</h3>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Bowler</th><th style="text-align:right;">Overs</th><th style="text-align:right;">Runs</th><th style="text-align:right;">Wickets</th><th style="text-align:right;">Maidens</th><th style="text-align:right;">Economy</th></tr></thead>
+                        <tbody id="main-inn1-bowl-body"></tbody>
+                    </table>
                 </div>
             </div>
 
@@ -147,11 +169,52 @@
                 </div>
             </div>
 
-            <!-- ═══ 2nd Innings Bowling (Placeholder) ═══ -->
+            <!-- ═══ 2nd Innings Bowling ═══ -->
             <div id="bowl2-card" class="glass-card" style="display:none;">
-                <div style="text-align:center; padding:3rem 1rem; color:var(--text-muted);">
-                    <div style="font-size:2rem; margin-bottom:0.5rem;">🎯</div>
-                    <p style="font-size:1rem;">2nd Innings Bowling — coming soon</p>
+                <h3 style="margin-bottom:1rem;">🎯 2nd Innings — Bowling</h3>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Bowler</th><th style="text-align:right;">Overs</th><th style="text-align:right;">Runs</th><th style="text-align:right;">Wickets</th><th style="text-align:right;">Maidens</th><th style="text-align:right;">Economy</th></tr></thead>
+                        <tbody id="main-inn2-bowl-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ═══ Super Over 1 (combined bat + bowl) ═══ -->
+            <div id="so1-card" class="glass-card" style="display:none;">
+                <h3 style="margin-bottom:1rem;">⚡ Super Over 1</h3>
+                <h4 style="margin-bottom:0.5rem; color:var(--primary-light);">🏏 Batting</h4>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Batsman</th><th></th><th style="text-align:right;">Runs</th><th style="text-align:right;">Balls</th><th style="text-align:right;">4s</th><th style="text-align:right;">6s</th><th style="text-align:right;">SR</th></tr></thead>
+                        <tbody id="so1-bat-body" class="sc-bat-body"></tbody>
+                    </table>
+                </div>
+                <h4 style="margin:1rem 0 0.5rem; color:var(--primary-light);">🎯 Bowling</h4>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Bowler</th><th style="text-align:right;">Overs</th><th style="text-align:right;">Runs</th><th style="text-align:right;">Wickets</th><th style="text-align:right;">Maidens</th><th style="text-align:right;">Economy</th></tr></thead>
+                        <tbody id="so1-bowl-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ═══ Super Over 2 (combined bat + bowl) ═══ -->
+            <div id="so2-card" class="glass-card" style="display:none;">
+                <h3 style="margin-bottom:1rem;">⚡ Super Over 2</h3>
+                <h4 style="margin-bottom:0.5rem; color:var(--primary-light);">🏏 Batting</h4>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Batsman</th><th></th><th style="text-align:right;">Runs</th><th style="text-align:right;">Balls</th><th style="text-align:right;">4s</th><th style="text-align:right;">6s</th><th style="text-align:right;">SR</th></tr></thead>
+                        <tbody id="so2-bat-body" class="sc-bat-body"></tbody>
+                    </table>
+                </div>
+                <h4 style="margin:1rem 0 0.5rem; color:var(--primary-light);">🎯 Bowling</h4>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Bowler</th><th style="text-align:right;">Overs</th><th style="text-align:right;">Runs</th><th style="text-align:right;">Wickets</th><th style="text-align:right;">Maidens</th><th style="text-align:right;">Economy</th></tr></thead>
+                        <tbody id="so2-bowl-body"></tbody>
+                    </table>
                 </div>
             </div>
 
@@ -187,6 +250,8 @@
                         <button class="innings-tab" id="perf-tab-bowl1"        onclick="switchPerfTab('bowl1')">🎯 1st Innings Bowling</button>
                         <button class="innings-tab" id="perf-tab-inn2"         onclick="switchPerfTab('inn2')">🏏 2nd Innings Batting</button>
                         <button class="innings-tab" id="perf-tab-bowl2"        onclick="switchPerfTab('bowl2')">🎯 2nd Innings Bowling</button>
+                        <button class="innings-tab" id="perf-tab-so1"          style="display:none;" onclick="switchPerfTab('so1')">⚡ Super Over 1</button>
+                        <button class="innings-tab" id="perf-tab-so2"          style="display:none;" onclick="switchPerfTab('so2')">⚡ Super Over 2</button>
                     </div>
 
                     <!-- 1st Innings Batting (Old-style) -->
@@ -232,20 +297,60 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- Super Over 1 (bat + bowl combined) -->
+                    <div id="perf-so1-card" class="glass-card" style="display:none;">
+                        <h3>⚡ Super Over 1</h3>
+                        <h4 style="margin-bottom:0.5rem; color:var(--primary-light);">🏏 Batting</h4>
+                        <div class="table-scroll">
+                            <table>
+                                <thead><tr><th>Batsman</th><th>Runs</th><th>Balls</th><th>4s</th><th>6s</th><th>SR</th><th>Dismissal</th></tr></thead>
+                                <tbody id="perf-so1-bat-body"></tbody>
+                            </table>
+                        </div>
+                        <h4 style="margin:1rem 0 0.5rem; color:var(--primary-light);">🎯 Bowling</h4>
+                        <div class="table-scroll">
+                            <table>
+                                <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Maidens</th><th>Economy</th></tr></thead>
+                                <tbody id="perf-so1-bowl-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Super Over 2 (bat + bowl combined) -->
+                    <div id="perf-so2-card" class="glass-card" style="display:none;">
+                        <h3>⚡ Super Over 2</h3>
+                        <h4 style="margin-bottom:0.5rem; color:var(--primary-light);">🏏 Batting</h4>
+                        <div class="table-scroll">
+                            <table>
+                                <thead><tr><th>Batsman</th><th>Runs</th><th>Balls</th><th>4s</th><th>6s</th><th>SR</th><th>Dismissal</th></tr></thead>
+                                <tbody id="perf-so2-bat-body"></tbody>
+                            </table>
+                        </div>
+                        <h4 style="margin:1rem 0 0.5rem; color:var(--primary-light);">🎯 Bowling</h4>
+                        <div class="table-scroll">
+                            <table>
+                                <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Maidens</th><th>Economy</th></tr></thead>
+                                <tbody id="perf-so2-bowl-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- ─── Ball Log ─── -->
-                <div id="detail-balllog-panel" class="glass-card" style="display:none;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.6rem;">
+                <div id="detail-balllog-panel" class="glass-card ball-log-panel" style="display:none;">
+                    <div class="section-head ball-log-head">
                         <h3 style="margin:0;">📋 Ball-by-Ball Log</h3>
-                        <div style="display:flex; gap:0.5rem;">
+                        <div class="ball-log-filters">
                             <button class="filter-btn active" id="log-inn-1" onclick="filterBallLog(1)">1st Innings</button>
                             <button class="filter-btn" id="log-inn-2" onclick="filterBallLog(2)">2nd Innings</button>
+                            <button class="filter-btn" id="log-inn-3" style="display:none;" onclick="filterBallLog(3)">SO 1</button>
+                            <button class="filter-btn" id="log-inn-4" style="display:none;" onclick="filterBallLog(4)">SO 2</button>
                         </div>
                     </div>
-                    <div id="ball-over-viz" style="margin-bottom:1.2rem; display:flex; flex-wrap:wrap; gap:0.5rem;"></div>
+                    <div id="ball-over-viz" class="ball-over-viz"></div>
                     <div class="table-scroll">
-                        <table>
+                        <table class="ball-log-table">
                             <thead>
                                 <tr>
                                     <th>Over.Ball</th>
@@ -263,10 +368,12 @@
                     </div>
                 </div>
 
-            </div>
+            </div><!-- /details-card -->
 
-        </div>
-    </div>
+            </div><!-- /sc-mode-details -->
+
+        </div><!-- /scorecard-view -->
+    </div><!-- /container -->
 
     <!-- ═══ CONTEXT MODAL (Striker, Non-Striker, Bowler) ═══ -->
     <div id="contextModal" class="modal-overlay" style="display:none; z-index: 3000; background: rgba(0,0,0,0.85);">
@@ -297,6 +404,16 @@
 
     <!-- ═══ LIVE SCORING VIEW (standard page layout, below the top nav) ═══ -->
     <div id="live-scoring-view" style="display:none;">
+        <div class="kbd-legend" title="Keyboard shortcuts">
+            <span><kbd>0</kbd>–<kbd>6</kbd> runs</span>
+            <span><kbd>W</kbd> wicket</span>
+            <span><kbd>N</kbd> no-ball</span>
+            <span><kbd>V</kbd> wide</span>
+            <span><kbd>B</kbd> bye</span>
+            <span><kbd>L</kbd> leg-bye</span>
+            <span><kbd>U</kbd> undo</span>
+        </div>
+
 
         <!-- TOOLBAR -->
         <div class="be-toolbar">
@@ -321,6 +438,7 @@
                         <span id="ls-batting-team" class="be-team-badge batting">BAT TEAM</span>
                         <span id="ls-bowling-team" class="be-team-badge bowling">BOWL TEAM</span>
                     </div>
+                    <div id="ls-innings-sides" class="ls-innings-sides" style="display:none;"></div>
                     <div class="be-score-row">
                         <span id="ls-score" class="be-main-score">0/0</span>
                         <span id="ls-overs" class="be-main-overs">(0.0)</span>
@@ -328,6 +446,21 @@
                     <div class="be-crr">CRR: <span id="ls-crr">0.00</span></div>
                     <!-- Live target / chase / result banner (2nd innings & super over) -->
                     <div id="ls-target-banner" class="ls-target-banner" style="display:none;"></div>
+
+                    <!-- Win Probability Bar — only visible during 2nd innings chase -->
+                    <div id="win-prob-container" class="win-prob-container" style="display:none;">
+                        <div class="win-prob-header">
+                            <span id="win-prob-label-chasing" class="win-prob-label-chase"></span>
+                            <span class="win-prob-title">Win Probability</span>
+                            <span id="win-prob-label-defending" class="win-prob-label-defend"></span>
+                        </div>
+                        <div class="win-prob-track"><div id="win-prob-bar-fill" class="win-prob-bar-fill"></div></div>
+                        <div class="win-prob-meta">
+                            <span id="win-prob-crr" class="win-prob-crr"></span>
+                            <span id="win-prob-needed" class="win-prob-needed"></span>
+                            <span id="win-prob-rrr" class="win-prob-rrr"></span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Current over timeline (6 circular indicators) -->
@@ -412,11 +545,36 @@
                 </div>
             </div>
 
+        </div><!-- /.be-grid -->
+
+        <!-- LIVE BALL LOG (compact, under tracker + keypad) -->
+        <div class="glass-card ls-live-log" id="ls-live-log">
+            <div class="section-head ls-live-log-head">
+                <h3 style="margin:0;">📋 Ball Log</h3>
+                <span class="muted-chip">This innings · latest 12</span>
+            </div>
+            <div id="ls-ball-over-viz" class="ball-over-viz"></div>
+            <div class="table-scroll ls-live-log-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ball</th>
+                            <th>Batter</th>
+                            <th>Bowler</th>
+                            <th>Runs</th>
+                            <th>Note</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ls-ball-log-body">
+                        <tr><td colspan="5" class="empty-state">Waiting for first ball…</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- LIVE BATTING/BOWLING SCORECARD -->
-        <div class="glass-card" id="ls-scorecard-card" style="margin-top:1.5rem;">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+        <div class="glass-card" id="ls-scorecard-card">
+            <div class="section-head" style="margin-bottom:1rem;">
                 <h3 id="ls-scorecard-title" style="margin:0;">🏏 Batting Scorecard</h3>
                 <div style="display:flex; gap:0.4rem;">
                     <button class="filter-btn active" id="ls-sc-tab-bat" onclick="lsSwitchScorecardTab('bat')">🏏 Batting</button>
@@ -577,6 +735,101 @@
 
     <!-- ═══ BALL LOG PANEL (inside scorecard) ═══ -->
     <!-- This is injected dynamically by JS into the scorecard view -->
+
+    <!-- ═══ ACTIVATE SCHEDULED MATCH WIZARD ═══ -->
+    <div id="activate-match-modal" class="modal-overlay" style="display:none;">
+      <div class="modal-card glass-card" style="max-width:680px; width:92%; max-height:92vh; display:flex; flex-direction:column;">
+        <div style="overflow-y:auto;">
+          <div class="wizard-progress"><div class="wizard-progress-bar" id="aw-progress-bar" style="width:25%;"></div></div>
+          <div class="wizard-steps-labels">
+            <span data-astep="1">Tournament</span><span data-astep="2">Match</span>
+            <span data-astep="3">Details</span><span data-astep="4">Playing XI</span>
+          </div>
+
+          <div class="wizard-step wizard-active" id="aw-step-1">
+            <h3 class="modal-title">Activate a Scheduled Match</h3>
+            <div class="form-group">
+              <label>Select Tournament</label>
+              <select id="aw-tournament-select" class="form-input" onchange="awOnTournamentSelected(this.value)">
+                <option value="">Loading tournaments…</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="wizard-step" id="aw-step-2">
+            <h3 class="modal-title">Select Match to Activate</h3>
+            <div class="form-group">
+              <label>Scheduled Match</label>
+              <select id="aw-match-select" class="form-input" onchange="awOnMatchSelected(this.value)">
+                <option value="">— Select a match —</option>
+              </select>
+            </div>
+            <div id="aw-match-preview" class="match-preview-card" style="display:none;"></div>
+          </div>
+
+          <div class="wizard-step" id="aw-step-3">
+            <h3 class="modal-title">Match Details</h3>
+            <div class="form-group">
+              <label>Venue <span class="required">*</span></label>
+              <select id="aw-venue-select" class="form-input" onchange="activateWizardState.venueID=parseInt(this.value)||null"></select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>On-Field Umpire 1 <span class="required">*</span></label>
+                <select id="aw-umpire1-select" class="form-input" onchange="activateWizardState.umpire1ID=parseInt(this.value)||null"></select>
+              </div>
+              <div class="form-group">
+                <label>On-Field Umpire 2 <span class="required">*</span></label>
+                <select id="aw-umpire2-select" class="form-input" onchange="activateWizardState.umpire2ID=parseInt(this.value)||null"></select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Third Umpire (optional)</label>
+              <select id="aw-umpire3-select" class="form-input" onchange="activateWizardState.thirdUmpireID=parseInt(this.value)||null"></select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Match Date (optional)</label>
+                <input type="date" id="aw-match-date" class="form-input" onchange="activateWizardState.matchDate=this.value">
+              </div>
+              <div class="form-group">
+                <label>Day/Night?</label>
+                <select id="aw-day-night" class="form-input" onchange="activateWizardState.isDayNight=(this.value==='1')">
+                  <option value="0">Day</option><option value="1">Day/Night</option>
+                </select>
+              </div>
+            </div>
+            <hr style="border-color:rgba(255,255,255,0.08); margin:16px 0;">
+            <h4 style="color:var(--primary-light); margin-bottom:12px;">Toss</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Toss Won By <span class="required">*</span></label>
+                <select id="aw-toss-winner" class="form-input" onchange="activateWizardState.tossWinner=this.value"></select>
+              </div>
+              <div class="form-group">
+                <label>Decision <span class="required">*</span></label>
+                <select id="aw-toss-decision" class="form-input" onchange="activateWizardState.tossDecision=this.value">
+                  <option value="">— Choose —</option><option value="bat">Bat</option><option value="bowl">Bowl</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="wizard-step" id="aw-step-4">
+            <h3 class="modal-title">Select Playing XI</h3>
+            <p class="modal-hint">Pick 11 players per team from the registered tournament squad, plus a Captain and Wicket-Keeper.</p>
+            <div id="aw-xi-container"></div>
+          </div>
+
+          <div class="wizard-nav">
+            <button class="btn-cancel" id="aw-back-btn" onclick="awBack()" style="display:none;">← Back</button>
+            <button class="btn-cancel" onclick="closeActivateWizard()">Cancel</button>
+            <button class="btn-submit" id="aw-next-btn" onclick="awNext()">Next →</button>
+            <button class="btn-submit" id="aw-submit-btn" onclick="submitActivateWizard()" style="display:none;">Activate Match ✓</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div id="addMatchModal" class="modal-overlay" style="display:none;">
         <div class="modal-card glass-card" style="max-width: 800px; width: 90%;">
@@ -748,5 +1001,6 @@
     <script src="matches.js"></script>
     <script src="parallax.js"></script>
     <button id="scroll-top-btn" class="scroll-top-btn" title="Back to top">↑</button>
+    <script src="enhance.js"></script>
 </body>
 </html>
