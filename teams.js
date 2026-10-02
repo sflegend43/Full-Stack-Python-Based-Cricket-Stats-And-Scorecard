@@ -1,3 +1,11 @@
+// teams.js — CricketStats Pro | Teams Page Logic
+
+const API = 'http://localhost:5001';
+
+function getUser() {
+    try { return JSON.parse(localStorage.getItem('cricketUser')); }
+    catch { return null; }
+}
 
 async function authFetch(url, options = {}) {
     const user = getUser();
@@ -8,30 +16,13 @@ async function authFetch(url, options = {}) {
     return fetch(url, { ...options, headers });
 }
 
-// teams.js — CricketStats Pro | Teams Page Logic
-
-const API = 'http://localhost:5001';
-
-function escHtml(v) {
-    return String(v ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
-
-
-function getUser() {
-    try { return JSON.parse(localStorage.getItem('cricketUser')); }
-    catch { return null; }
-}
-
 document.addEventListener('DOMContentLoaded', () => {
     const _user = getUser();
     if (!_user || !_user.isAdmin) {
         document.querySelectorAll('.admin-only').forEach(el => el.remove());
     }
 });
+
 
 function logout() {
     localStorage.removeItem('cricketUser');

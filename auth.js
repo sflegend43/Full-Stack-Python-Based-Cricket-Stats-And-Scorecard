@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const fullname = (document.getElementById('fullname') || {}).value?.trim() || '';
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
-            const roleEl = document.getElementById('role');
+            const roleEl = document.getElementById('role-select') || document.getElementById('role');
             const role = roleEl ? roleEl.value : 'user';
             const adminKey = (document.getElementById('adminKey') || {}).value || '';
             if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }

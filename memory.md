@@ -1,7 +1,7 @@
 # Project Memory — CricketStats Pro
 
 ## Current State
-Working full-stack cricket stats app with live ball-by-ball scoring, running on `localhost:5001`.
+Working full-stack cricket stats app with live ball-by-ball scoring, Super Over support, Free Hit enforcement, and Hall of Fame records. Running on `localhost:5001`.
 
 ## Key Decisions & Rationale
 
@@ -9,12 +9,13 @@ Working full-stack cricket stats app with live ball-by-ball scoring, running on 
 - **SQLite with WAL**: Simple, no external DB server needed. WAL mode for concurrent read/write.
 - **`get_db()` per request**: Each request gets a fresh connection (no connection pooling). Auto-commits via `with` context manager.
 - **`requires_admin` decorator**: Wraps routes to check `user['isAdmin']` from Bearer token. Returns 403 if not admin.
-- **`enforce_bowler_rules()`**: Server-side validation prevents: same bowler two consecutive overs, bowler exceeding max overs for format.
-- **`save_match_state()`**: Persists striker/non-striker/bowler to `MatchState` table after every ball. Restored on reload.
+- **`enforce_bowler_rules()`**: Server-side validation prevents: same bowler two consecutive overs, bowler exceeding max overs for format. **Bypassed for Super Over (innings >= 3).**
+- **`save_match_state()`**: Persists striker/non-striker/bowler/freeHitPending to `MatchState` table after every ball. Restored on reload.
+- **Passwords**: All passwords hashed with Werkzeug (`generate_password_hash`). Legacy plaintext passwords self-heal to hashed on next login.
 
 ### Frontend
 - **No framework**: Vanilla JS with `fetch`/`authFetch`. All rendering via `innerHTML` string templates.
-- **`authFetch()`**: Wrapper that adds `Authorization: Bearer <token>` header. Used everywhere except `lsRefreshStats` (which uses plain `fetch` with cache-busting `?_t=` param).
+- **`authFetch()`**: Wrapper that adds `Authorization: Bearer <token>` header. Used everywhere.
 - **`window.DataSync`**: BroadcastChannel with localStorage fallback for cross-tab sync.
 - **`viewScorecard()`**: Navigates from match list → scorecard detail. Sets `beMatchId` for ball entry.
 - **`openBallEntry()`**: Transitions from scorecard → live scoring view. Fetches match state, populates context.
@@ -27,24 +28,25 @@ Working full-stack cricket stats app with live ball-by-ball scoring, running on 
 
 ## Known Issues / Tech Debt
 
-### Critical
-1. **`seed_data.py` missing venues/umpires**: `app.py:439-442` references `seed_data.venues` and `seed_data.umpires` which don't exist. The `/api/seed` endpoint will crash on first run.
-2. **No password hashing**: Passwords stored as plaintext in the `users` table.
-3. **`MatchState` delete on match deletion**: Fixed (was causing 500 errors), now included in both single match delete and tournament cascade delete.
+### Resolved ✅
+1. ~~**`seed_data.py` missing venues/umpires**~~: Venues (12) + umpires (8) now present in `seed_data.py`. Seed smoke-tested OK.
+2. ~~**No password hashing**~~: Passwords are now hashed with Werkzeug on signup; legacy plaintext passwords self-heal on login.
+3. ~~**`MatchState` delete on match deletion**~~: Fixed — included in both single match delete and tournament cascade delete.
+4. ~~**Scorecard endpoint indentation**~~: `return jsonify(...)` moved inside the `with get_db()` block.
+5. ~~**`lsRefreshStats` uses plain `fetch`**~~: Now uses `authFetch` for consistency.
+6. ~~**Duplicate `confirmDeleteBall`**~~: Removed duplicate function definition.
 
 ### Moderate
-4. **Scorecard endpoint indentation**: `return jsonify(...)` in `/api/stats/scorecard/<match_id>` was outside the `with get_db()` block. Fixed by moving inside.
-5. **`lsRefreshStats` uses plain `fetch`**: No auth header, relies on cache-busting `?_t=` to avoid caching. Should use `authFetch` for consistency.
-6. **Duplicate `confirmDeleteBall`**: Had two definitions due to JS hoisting. Fixed by removing the old one.
+7. **No CSRF protection**: Token-based auth via localStorage, no CSRF tokens. Acceptable for this use case.
+8. **Inline styles**: Many components use extensive inline styles rather than CSS classes.
+9. **`dummy.png` and `player-placeholder.svg`**: Two different fallback systems for player images depending on context. Low priority.
 
 ### Low
-7. **`dummy.png` and `player-placeholder.svg`**: Two different fallback systems for player images depending on context.
-8. **No CSRF protection**: Token-based auth via localStorage, no CSRF tokens.
-9. **Inline styles**: Many components use extensive inline styles rather than CSS classes.
+10. **`enhance.js` duplicates `refreshAIInsight`**: Both `logic.js` and `enhance.js` define this function. `enhance.js` is the canonical version used on all pages; `logic.js` version is used by `refreshDashboard()` locally. Harmless but worth consolidating.
 
-## File Edit History (This Session)
+## File Edit History
 
-### Bug Fixes Applied
+### Bug Fixes Applied (Previous Sessions)
 - `app.py`: Fixed scorecard endpoint indentation (return inside `with` block)
 - `app.py`: Added `DELETE FROM MatchState` to match deletion + tournament cascade
 - `app.py`: Added `try/except` to delete_match with error logging
@@ -57,16 +59,24 @@ Working full-stack cricket stats app with live ball-by-ball scoring, running on 
 - `teams.js`: Added 4 missing featured players (Afghanistan, Bangladesh, England, Sri Lanka)
 - `style.css`: Fixed team roster grid sizing (280px → 240px column, 320px → 280px image height)
 
-### Features Added
+### Bug Fixes Applied (Session 2026-09-17)
+- `auth.js`: Fixed role ID mismatch — `getElementById('role')` → `getElementById('role-select') || getElementById('role')`. **Critical fix**: admin signup via form was always creating 'user' accounts.
+- `logic.js`: Removed dead `const running = ...` variable with operator-precedence bug (`||` vs `&&`); was never used.
+- `teams.js`: Reordered `getUser()` before `authFetch()` to eliminate temporal dead zone; moved file header comment to line 1.
+- `signup.html`: Moved `toggleAdminKey()` inline `<script>` out of `<form>` element to before `</body>` — invalid HTML placement.
+
+### Features Added (Previous Sessions)
 - Live scoring card tabs (Batting/Bowling) below ball entry
-- Scorecard tab restructure: 6 main tabs (1st/2nd Innings Bat/Bowl, Playing XI, Detailed Stats); batting on main tabs with broadcast-style `sc-*` classes (`sc-out`, `sc-notout`, `sc-dnb`); Detailed Stats has Players Performance (2 sub-sub bowling tabs) + Ball Log; `pickBattingXI()` + `renderBatTable(tbId, rows, xiRows, opts)` rewrite
-- `beDismissedIDs` local tracking with server merge
-- `pendingNewBatter` flag system
-- `cancelContextModal()` with enforcement toast
-- Broadcast batting card: 7 columns, 3 row states, `formatDismissal()` helper (`c {f} b {b}`, `st {f} b {b}`, `run out ({f})`, etc.)
-- **Batting order enforcement**: batted→XI order, active-but-not-batted→after batted, yet-to-bat→XI order (not role)
-- **WK fielder tagging**: `(WK)` tag via `data-wk` attribute; auto-selects WK on Stumped
-- **New batter picker**: checks both `currentStriker` and `currentNonStriker` for players at crease not dismissed
+- Scorecard tab restructure: 6 main tabs + super over tabs
+- Broadcast batting card with `formatDismissal()` helper
+- Batting order enforcement with XI position tracking
+- WK fielder tagging with `data-wk` attribute; auto-selects WK on Stumped
+- New batter picker with `pendingNewBatter` flag system
+- Free Hit badge in live scoring UI
+- Super Over support (innings 3-4)
+- Hall of Fame records page (`records.html` + `records.js`)
+- Tournament schedule board + bracket view
+- AI Stats page with 4 query modes (Player, H2H, PvP, PvT)
 
 ## Running the App
 ```
@@ -75,9 +85,19 @@ python app.py
 Server: `http://localhost:5001`
 Navigate to: `http://localhost:5001/login.html`
 
+**Dev admin signup key:** `CRICKET_ADMIN_2026` (only works when `CRICKET_ALLOW_DEV_ADMIN_KEY=1` or `FLASK_DEBUG=1`)
+
 ## Database Reset
 ```
 python reset_db.py
 python app.py
-# Then hit /api/seed (note: will fail on venues/umpires due to seed_data bug)
+# First dashboard load auto-seeds venues, umpires, teams, and players
 ```
+
+## Environment Variables
+| Variable | Purpose |
+|----------|---------|
+| `CRICKET_ADMIN_KEY` | Production admin signup key |
+| `CRICKET_ALLOW_DEV_ADMIN_KEY=1` | Allow dev fallback key locally |
+| `CRICKET_ALLOW_DB_RESET=1` | Enable `/api/dev/reset` |
+| `CRICKET_TOKEN_TTL_SECONDS` | Session TTL (default 604800 = 7 days) |

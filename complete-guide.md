@@ -34,41 +34,42 @@ A full-stack Python/Flask cricket statistics and live scorekeeping platform. Two
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `app.py` | 4407 | Flask backend: 60+ API routes, DB init, auth, scoring logic, Super Over, tournament generation, schedule management |
-| `seed_data.py` | 549 | Static data: 10 teams, 251 players, 251 squad entries |
+| `app.py` | 4631 | Flask backend: 60+ API routes, DB init, auth, scoring logic, Super Over, Free Hit, tournament generation, schedule management |
+| `seed_data.py` | 549 | Static data: 10 teams, 251 players, 251 squad entries, 12 venues, 8 umpires |
 | `reset_db.py` | 25 | DB reset utility |
 | `dump_schema.py` | 3 | Schema dump utility |
+| `print_schema.py` | 8 | Schema print utility |
 | `requirements.txt` | 2 | Flask, werkzeug |
 | `Start_App.bat` | 1 | Windows launcher |
-| `matches.html` | 930 | Match list, scorecard, live scoring |
+| `matches.html` | 930 | Match list, scorecard, live scoring, Super Over |
 | `players.html` | 254 | Player roster + add/edit modals |
 | `teams.html` | 146 | Team list + roster detail |
-| `tournaments.html` | 354 | Tournament CRUD + standings + squads + schedule board |
-| `rankings.html` | 119 | Team + player rankings |
-| `index.html` | 108 | Dashboard with stats overview |
+| `tournaments.html` | 354 | Tournament CRUD + standings + squads + schedule board + bracket |
+| `rankings.html` | 125 | Team + player rankings |
+| `records.html` | 105 | Hall of Fame — all-time records |
+| `index.html` | 116 | Dashboard with stats overview |
 | `stats.html` | 354 | AI stats query page (player stats, H2H, P vs P, P vs Team) |
-| `records.html` | 100 | Hall of Fame — all-time records |
-| `signup.html` | 75 | Registration page |
-| `login.html` | 50 | Auth page |
-| `matches.js` | 2642 | Match list, scorecard, live scoring logic |
+| `signup.html` | 87 | Registration page |
+| `login.html` | 58 | Auth page |
+| `matches.js` | 2642 | Match list, scorecard, live scoring, Super Over, Free Hit |
 | `tournaments.js` | 1053 | Tournament CRUD, wizard, squad selection, schedule board, bracket |
 | `stats.js` | 629 | Stats page logic (player stats, H2H, PVP, PVT) |
 | `players.js` | 517 | Player cards, search, add/edit forms |
-| `teams.js` | 337 | Team list, roster, featured players |
-| `rankings.js` | 190 | Rankings display |
-| `logic.js` | 195 | Dashboard: overview, leaderboards, AI insight |
-| `transitions.js` | 246 | View transitions, scroll behavior, DataSync |
-| `auth.js` | 82 | Login/signup form handling |
-| `records.js` | 86 | Hall of Fame records display |
-| `enhance.js` | 48 | Shared UX layer: AI insight refresh |
+| `teams.js` | 373 | Team list, roster, featured players |
+| `rankings.js` | 216 | Rankings display + CSV export |
+| `records.js` | 94 | Hall of Fame records display |
+| `logic.js` | 220 | Dashboard: overview, leaderboards, AI insight |
+| `transitions.js` | 287 | View transitions, scroll behavior, DataSync |
+| `auth.js` | 89 | Login/signup form handling |
+| `enhance.js` | 55 | Shared UX layer: AI insight refresh + CSV export |
 | `cricket_scene.js` | 6 | Cricket animation |
 | `parallax.js` | 17 | Parallax scroll effect |
 | `style.css` | 3726 | All styles: 30+ major sections |
 | `cricket_anim.css` | 6 | Cricket animations |
 | `Players Pics/` | 96 files | 95 player PNGs + 1 SVG placeholder |
 | `dummy.png` | 1 | Fallback player image |
-| `player-placeholder.svg` | 1 | Players page hero fallback |
 | `stadium_bg.png` | 1 | Background overlay for all pages |
+| `batsman.png` | 1 | Cricket animation asset |
 
 ---
 

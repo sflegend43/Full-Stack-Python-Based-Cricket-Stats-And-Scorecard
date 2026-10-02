@@ -60,14 +60,7 @@
                         placeholder="Enter the secret registration key">
                 </div>
 
-                <script>
-                    function toggleAdminKey() {
-                        const role = document.getElementById('role-select').value;
-                        const keyGroup = document.getElementById('admin-key-group');
-                        keyGroup.style.display = role === 'admin' ? 'block' : 'none';
-                        document.getElementById('adminKey').required = role === 'admin';
-                    }
-                </script>
+
 
                 <button type="submit" class="btn btn-primary" id="signup-btn" style="margin-top:1rem;">
                     ✅ Create Account
@@ -82,5 +75,13 @@
 
     <script src="auth.js"></script>
     <script src="parallax.js"></script>
+    <script>
+        function toggleAdminKey() {
+            const role = document.getElementById('role-select').value;
+            const keyGroup = document.getElementById('admin-key-group');
+            keyGroup.style.display = role === 'admin' ? 'block' : 'none';
+            document.getElementById('adminKey').required = role === 'admin';
+        }
+    </script>
 </body>
 </html>

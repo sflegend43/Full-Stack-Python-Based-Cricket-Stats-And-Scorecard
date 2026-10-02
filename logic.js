@@ -125,7 +125,6 @@ async function loadTournamentDashboard() {
         const tournaments = await tRes.json();
         const overview = oRes.ok ? await oRes.json() : {};
 
-        const running = tournaments.filter(t => t.status === 'running' || t.status === 'upcoming' && (t.totalMatches || 0) > 0 && (t.completedMatches || 0) < (t.totalMatches || 0));
         // Split cleanly by server status
         const runningList = tournaments.filter(t => t.status === 'running');
         const finishedList = tournaments.filter(t => t.status === 'completed');

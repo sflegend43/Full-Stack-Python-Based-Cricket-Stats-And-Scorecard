@@ -25,37 +25,44 @@
 
 ```
 /
-├── app.py                  # Flask app: all API routes, DB init, seed
+├── app.py                  # Flask app: all API routes, DB init, seed (~4631 lines)
 ├── seed_data.py            # Static data: 10 teams, 251 players, 251 squads
 ├── reset_db.py             # DB reset utility
 ├── dump_schema.py          # Schema dump utility
+├── print_schema.py         # Schema print utility
 ├── cricket_stats.db        # SQLite database
-├── requirements.txt        # Python deps
+├── requirements.txt        # Python deps (Flask, werkzeug)
 ├── Start_App.bat           # Windows launcher
 │
 ├── index.html              # Dashboard
 ├── login.html              # Auth page
-├── matches.html            # Match list + scorecard + live scoring
+├── signup.html             # Registration page
+├── matches.html            # Match list + scorecard + live scoring + Super Over
 ├── players.html            # Player roster + detail modal
 ├── teams.html              # Team list + roster + match history
-├── tournaments.html        # Tournament list + standings
+├── tournaments.html        # Tournament list + standings + schedule board + bracket
 ├── rankings.html           # Team + player rankings
+├── records.html            # Hall of Fame — all-time records
 ├── stats.html              # AI stats query
 │
-├── style.css               # Global styles (~2309 lines)
-├── cricket_anim.css        # Animations
-├── transitions.js          # View transitions + scroll behavior + DataSync
-├── auth.js                 # Shared auth helpers (authFetch, getUser)
-├── logic.js                # Dashboard logic (overview, leaderboards, AI insight)
-├── matches.js              # Match list, scorecard, live scoring (~1859 lines)
-├── players.js              # Player cards, search, hero images (~430 lines)
-├── teams.js                # Team list, roster, featured player
-├── tournaments.js          # Tournament CRUD, standings
-├── rankings.js             # Team + player rankings
+├── style.css               # Global styles (~3726 lines)
+├── cricket_anim.css        # Animations (6 lines)
+├── transitions.js          # View transitions + scroll behavior + DataSync (287 lines)
+├── auth.js                 # Login/signup form handling (89 lines)
+├── enhance.js              # Shared UX: AI insight refresh + CSV export (55 lines)
+├── logic.js                # Dashboard logic: overview, leaderboards, AI insight (220 lines)
+├── matches.js              # Match list, scorecard, live scoring (~2642 lines)
+├── players.js              # Player cards, search, hero images (~517 lines)
+├── teams.js                # Team list, roster, featured player (373 lines)
+├── tournaments.js          # Tournament CRUD, wizard, squad, schedule, bracket (~1053 lines)
+├── rankings.js             # Team + player rankings (216 lines)
+├── records.js              # Hall of Fame records display (94 lines)
+├── stats.js                # Stats page logic: player stats, H2H, PVP, PVT (~629 lines)
+├── cricket_scene.js        # Cricket animation asset (6 lines)
+├── parallax.js             # Parallax scroll effect (17 lines)
 │
 ├── Players Pics/           # 95 player PNG images + 1 SVG placeholder
 ├── dummy.png               # Fallback player image
-├── player-placeholder.svg  # Players page hero fallback
 ├── stadium_bg.png          # Background overlay
 └── batsman.png             # Cricket animation asset
 ```
@@ -63,28 +70,30 @@
 ## 3. Database Schema (13 Tables)
 
 ```
-users ─────────────── Auth (id, fullname, email, password, role, isAdmin, token)
+users ─────────────── Auth (id, fullname, email, password, role, isAdmin, token, tokenCreated)
 Players ───────────── Player profile (playerID PK, name, role, DOB, battingStyle, bowlingStyle, nationality, ...)
 Team ──────────────── Team registry (teamName PK, country, ranking, headCoach)
 Venue ─────────────── Venues (venueID PK, name, location)
 Umpire ────────────── Umpires (umpireID PK, name, country)
-Matches ───────────── Match record (matchID PK, teams, scores, toss, format, winner, FK→Team, FK→Venue)
-BallByBall ────────── Ball events (ballID PK, matchID FK→Matches, over, ball, batsman, bowler, runs, extras, wicket)
+Matches ───────────── Match record (matchID PK, teams, scores, toss, format, winner, FK→Team, FK→Venue, tossDecision)
+BallByBall ────────── Ball events (ballID PK, matchID FK→Matches, over, ball, batsman, bowler, runs, extras, wicket, fielderID)
 Squad ─────────────── Team rosters (teamName FK→Team, playerID FK→Players, PK=compound)
-PlayingXI ─────────── Match squads (matchID FK→Matches, playerID FK→Players, matchRole)
-MatchState ────────── Live scoring state (matchID FK→Matches, innings, striker, nonStriker, bowler)
-Tournament ────────── Tournament registry (tournamentName PK, format, startDate, endDate)
+PlayingXI ─────────── Match squads (matchID FK→Matches, playerID FK→Players, matchRole, teamName)
+MatchState ────────── Live scoring state (matchID FK→Matches, innings, striker, nonStriker, bowler, freeHitPending)
+Tournament ────────── Tournament registry (tournamentName PK, format, startDate, endDate, tournamentType, status)
 TournamentTeams ───── Tournament participants (tournamentName FK, teamName FK)
 TournamentSquad ───── Tournament squads (tournamentName FK, teamName FK, playerID FK)
 ```
 
-## 4. API Endpoints (47 Routes)
+## 4. API Endpoints (60+ Routes)
 
 ### Auth
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/auth/login` | None | Login, returns token |
-| POST | `/api/auth/signup` | None | Register user |
+| POST | `/api/auth/login` | None | Login alias |
+| POST | `/api/login` | None | Login, returns token |
+| POST | `/api/auth/signup` | None | Register alias |
+| POST | `/api/register` | None | Register user |
 | GET | `/api/auth/me` | Token | Current user profile |
 | PUT | `/api/auth/update-profile` | Token | Update name/email |
 
@@ -105,6 +114,7 @@ TournamentSquad ───── Tournament squads (tournamentName FK, teamName F
 | GET | `/api/teams` | None | List all teams with rankings |
 | POST | `/api/teams` | Admin | Create team |
 | GET | `/api/teams/<name>` | None | Team detail + squad + match history |
+| DELETE | `/api/teams/<name>` | Admin | Delete team |
 
 ### Matches (6)
 | Method | Route | Auth | Description |
@@ -119,10 +129,10 @@ TournamentSquad ───── Tournament squads (tournamentName FK, teamName F
 ### Balls (4)
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/balls` | Admin | Record a ball (validates bowler rules) |
+| POST | `/api/balls` | Admin | Record a ball (validates bowler rules; returns freeHitPending) |
 | GET | `/api/balls/<matchId>` | None | All balls for an innings |
 | DELETE | `/api/balls/<ballId>` | Admin | Delete a ball |
-| PUT | `/api/balls/state/<matchId>` | Admin | Get/set match state |
+| GET/PUT | `/api/balls/state/<matchId>` | Admin | Get/set match state |
 
 ### Venues (3)
 | Method | Route | Auth | Description |
@@ -146,7 +156,7 @@ TournamentSquad ───── Tournament squads (tournamentName FK, teamName F
 | GET | `/api/tournaments/<name>/standings` | None | League standings |
 | DELETE | `/api/tournaments/<name>` | Admin | Delete (cascades matches) |
 
-### Stats (6)
+### Stats (8)
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
 | GET | `/api/stats/scorecard/<matchId>` | None | Full scorecard (batting + bowling + Playing XI) |
@@ -154,13 +164,14 @@ TournamentSquad ───── Tournament squads (tournamentName FK, teamName F
 | GET | `/api/stats/players/stats` | None | Per-player batting + bowling stats |
 | GET | `/api/stats/ai-insight` | None | AI insight text |
 | POST | `/api/stats/ai-query` | None | Natural language query |
-| GET | `/api/rankings/teams` | None | Team rankings |
-| GET | `/api/rankings/players` | None | Player rankings |
+| GET | `/api/stats/records` | None | Hall of Fame records (filterable by format) |
+| GET | `/api/rankings/teams` | None | Team rankings (filterable by format) |
+| GET | `/api/rankings/players` | None | Player rankings (filterable by role) |
 
 ### Utility
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/seed` | None | Seed initial data |
+| POST | `/api/seed` | None | Seed initial data (no-op if data exists) |
 | GET | `/api/debug/players` | None | Debug: list all players |
 
 ## 5. Data Flow — Ball Entry
@@ -168,9 +179,10 @@ TournamentSquad ───── Tournament squads (tournamentName FK, teamName F
 ```
 User taps numpad → lsRecordRun(n) / lsOpenExtraModal() / lsOpenWicketModal()
     → lsSubmitBall(payload) → authFetch(POST /api/balls)
-        → Backend: enforce_bowler_rules() validates over limits
+        → Backend: enforce_bowler_rules() validates over limits (skipped for innings >= 3)
         → Backend: INSERT INTO BallByBall + save_match_state()
         → Backend: update match totals (team1TotalRuns etc.)
+        → Backend: set freeHitPending if NoBall
     → Frontend: local state update (scoreboard, timeline, batters)
     → If wicket: add to beDismissedIDs, set pendingNewBatter=true, openContextModal('wicket')
     → Frontend: lsRefreshStats() → GET /api/stats/scorecard
@@ -185,7 +197,7 @@ User taps numpad → lsRecordRun(n) / lsOpenExtraModal() / lsOpenWicketModal()
 renderBatTable(tbId, rows, xiRows, opts):
     1. Sort batted rows by XI position (xiPos map from xiRows)
     2. Compute battedIDs set
-    3. Compute activeNotBatted = activeIds - battedIDs (B update: new striker without row)
+    3. Compute activeNotBatted = activeIds - battedIDs (new striker without row)
     4. yetToBat = xiRows - battedIDs - activeNotBatted (in XI order)
     5. Render batted rows → sc-out / sc-notout with formatDismissal()
        - If pendingWicket: insert picker row after last dismissed batter
@@ -220,7 +232,22 @@ lsOnWicketTypeChange():
     → If Stumped: auto-select option[data-wk]
 ```
 
-## 9. Data Flow — Cross-Page Sync
+## 9. Free Hit Flow
+
+```
+POST /api/balls (NoBall):
+    → Backend sets MatchState.freeHitPending = 1
+    → Response includes freeHitPending: true
+    → Frontend shows free-hit badge in live scoring UI
+POST /api/balls (next legal delivery on free hit):
+    → Protected dismissals (Bowled/Caught/LBW/Stumped/HitWicket) blocked
+    → RunOut still allowed
+    → MatchState.freeHitPending reset to 0
+Wide during free hit:
+    → freeHitPending remains 1
+```
+
+## 10. Data Flow — Cross-Page Sync
 
 ```
 Tab A records ball → DataSync.dataChanged('ball-recorded')
@@ -229,6 +256,6 @@ Tab A records ball → DataSync.dataChanged('ball-recorded')
     → Tab B listener fires → loadMatches() / loadTeams() / etc.
 ```
 
-## 10. View Transitions API
+## 11. View Transitions API
 
-All 7 pages include `<meta name="view-transition" content="same-origin">`. Navigation uses `document.startViewTransition()` wrapped in `transitions.js` for animated page switches.
+All 9 pages include `<meta name="view-transition" content="same-origin">`. Navigation uses `document.startViewTransition()` wrapped in `transitions.js` for animated page switches.
