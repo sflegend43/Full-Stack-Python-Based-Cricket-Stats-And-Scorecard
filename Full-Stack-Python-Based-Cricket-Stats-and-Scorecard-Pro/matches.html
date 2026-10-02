@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="view-transition" content="same-origin">
+    <title>🏏 CricketStats Pro | Matches</title>
+    <meta name="description" content="Browse match scorecards, ball-by-ball data, and playing XIs in CricketStats Pro.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="cricket_anim.css">
+    <script>if (!localStorage.getItem('cricketUser')) window.location.href = 'login.html';</script>
+    <script src="transitions.js"></script>
+</head>
+<body>
+    <!-- Stadium background (low opacity) -->
+    <div class="stadium-bg-overlay"></div>
+    <div id="flash-container"></div>
+
+    <div class="container">
+        <!-- NAVBAR -->
+        <nav>
+            <div class="nav-top">
+                <div class="nav-left">
+                    <span class="logo-icon">🏏</span>
+                    <div>
+                        <span class="logo-name">CRICKET<span class="logo-pro">STATS</span><span class="logo-sub"> PRO</span></span>
+                    </div>
+                </div>
+                <div class="nav-center">
+                    <div class="ai-pill">
+                        <span class="ai-badge">AI INSIGHT</span>
+                        <span class="ai-text" id="ai-insight-text">Loading predictions...</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-user">
+                        <div class="user-avatar" id="user-avatar">A</div>
+                        <span class="nav-welcome">Welcome, <b id="user-name-display">Admin</b></span>
+                    </div>
+                    <a href="#" onclick="logout()" class="logout-btn">Sign Out ↗</a>
+                </div>
+            </div>
+            <div class="nav-bottom">
+                <ul class="nav-links">
+                    <li><a href="index.html" class="nav-link">📊 Dashboard</a></li>
+                    <li><a href="tournaments.html" class="nav-link">🏆 Tournament</a></li>
+                    <li><a href="matches.html" class="nav-link active">📋 Matches</a></li>
+                    <li><a href="players.html" class="nav-link">🏏 Players</a></li>
+                    <li><a href="teams.html" class="nav-link">🛡️ Teams</a></li>
+                    <li><a href="stats.html" class="nav-link">🤖 AI Stats</a></li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- MATCH LIST VIEW -->
+        <div id="list-view">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+                <div>
+                    <h1 style="font-size:1.6rem; font-weight:800; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
+                        📋 Match Centre
+                    </h1>
+                    <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.2rem;" id="match-count-label">Loading matches…</p>
+                </div>
+                <button class="btn-submit admin-only" style="width:auto; padding:0.6rem 1.4rem;" onclick="openAddMatchModal()">
+                    ➕ Add Match
+                </button>
+            </div>
+
+            <div class="filter-nav">
+                <button class="filter-btn active" onclick="setFormatFilter(this, '')">All Formats</button>
+                <button class="filter-btn" onclick="setFormatFilter(this, 'T20')">T20</button>
+                <button class="filter-btn" onclick="setFormatFilter(this, 'T10')">T10</button>
+                <button class="filter-btn" onclick="setFormatFilter(this, 'ODI')">ODI</button>
+                <button class="filter-btn" onclick="setFormatFilter(this, 'TEST')">TEST</button>
+            </div>
+
+            <div class="glass-card">
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Tournament</th>
+                                <th>Format</th>
+                                <th>Type</th>
+                                <th>Team 1</th>
+                                <th>Score</th>
+                                <th>Team 2</th>
+                                <th>Score</th>
+                                <th>Winner</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matches-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCORECARD DETAIL VIEW (hidden by default) -->
+        <div id="scorecard-view" style="display:none;">
+            <div style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.7rem;">
+                <button class="filter-btn" onclick="backToList()">← Back to Matches</button>
+                <button class="btn-submit admin-only" style="width:auto; padding:0.5rem 1.2rem;" onclick="openBallEntry()">🏏 Enter Ball</button>
+            </div>
+            <div id="scorecard-header-box"></div>
+
+            <!-- Innings Tabs -->
+            <div class="innings-tab-group">
+                <button class="innings-tab active" id="tab-inn1"  onclick="switchInnings(1)">🏏 1st Innings — Batting</button>
+                <button class="innings-tab" id="tab-inn2"          onclick="switchInnings(2)">🏏 2nd Innings — Batting</button>
+                <button class="innings-tab" id="tab-bowl1"         onclick="switchInnings('bowl1')">🎯 1st Innings — Bowling</button>
+                <button class="innings-tab" id="tab-bowl2"         onclick="switchInnings('bowl2')">🎯 2nd Innings — Bowling</button>
+                <button class="innings-tab" id="tab-xi"            onclick="switchInnings('xi')">👥 Playing XI</button>
+                <button class="innings-tab" id="tab-balllog"       onclick="switchInnings('balllog')">📋 Ball Log</button>
+            </div>
+
+            <!-- Batting Scorecard 1 -->
+            <div id="inn1-card" class="glass-card">
+                <h3>🏏 1st Innings — Batting</h3>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Batsman</th><th>Runs</th><th>Balls</th><th>4s</th><th>6s</th><th>SR</th><th>Dismissal</th></tr></thead>
+                        <tbody id="inn1-bat-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Batting Scorecard 2 -->
+            <div id="inn2-card" class="glass-card" style="display:none;">
+                <h3>🏏 2nd Innings — Batting</h3>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Batsman</th><th>Runs</th><th>Balls</th><th>4s</th><th>6s</th><th>SR</th><th>Dismissal</th></tr></thead>
+                        <tbody id="inn2-bat-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Bowling Scorecard 1 -->
+            <div id="bowl1-card" class="glass-card" style="display:none;">
+                <h3>🎯 1st Innings — Bowling</h3>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Maidens</th><th>Economy</th></tr></thead>
+                        <tbody id="inn1-bowl-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Bowling Scorecard 2 -->
+            <div id="bowl2-card" class="glass-card" style="display:none;">
+                <h3>🎯 2nd Innings — Bowling</h3>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th><th>Maidens</th><th>Economy</th></tr></thead>
+                        <tbody id="inn2-bowl-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Playing XI -->
+            <div id="xi-card" class="glass-card" style="display:none; padding:1.5rem;">
+                <h3 style="text-align:center; margin-bottom:1.5rem;">👥 Playing XI</h3>
+                <div style="display: flex; gap: 2rem; justify-content: space-between; flex-wrap: wrap;">
+                    <!-- Team 1 Box -->
+                    <div style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
+                        <h4 id="xi-team1-name" style="text-align:center; color:var(--primary-light); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem;">Team 1</h4>
+                        <ul id="xi-team1-list" style="list-style: none; padding: 0; margin: 0;">
+                            <!-- JS will populate -->
+                        </ul>
+                    </div>
+                    <!-- Team 2 Box -->
+                    <div style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
+                        <h4 id="xi-team2-name" style="text-align:center; color:var(--primary-light); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem;">Team 2</h4>
+                        <ul id="xi-team2-list" style="list-style: none; padding: 0; margin: 0;">
+                            <!-- JS will populate -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ball Log tab panel -->
+            <div id="balllog-card" class="glass-card" style="display:none;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.6rem;">
+                    <h3 style="margin:0;">📋 Ball-by-Ball Log</h3>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="filter-btn active" id="log-inn-1" onclick="filterBallLog(1)">1st Innings</button>
+                        <button class="filter-btn" id="log-inn-2" onclick="filterBallLog(2)">2nd Innings</button>
+                    </div>
+                </div>
+                <!-- Over-by-over visualiser -->
+                <div id="ball-over-viz" style="margin-bottom:1.2rem; display:flex; flex-wrap:wrap; gap:0.5rem;"></div>
+                <!-- Detailed table -->
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Over.Ball</th>
+                                <th>Batsman</th>
+                                <th>Bowler</th>
+                                <th>Delivery</th>
+                                <th>Runs</th>
+                                <th>Extras</th>
+                                <th>Wicket</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ball-log-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ═══ CONTEXT MODAL (Striker, Non-Striker, Bowler) ═══ -->
+    <div id="contextModal" class="modal-overlay" style="display:none; z-index: 3000; background: rgba(0,0,0,0.85);">
+        <div class="modal-card glass-card" style="max-width:400px; width:90%; text-align:left;">
+            <h3 id="contextModalTitle" style="margin-bottom: 1.5rem; text-align:center; color:var(--primary-light);">🏏 Context</h3>
+            
+            <div id="contextStrikerContainer" style="margin-bottom: 1rem;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Striker</label>
+                <select id="ctx-striker" class="form-input" style="width:100%;"></select>
+            </div>
+            
+            <div id="contextNonStrikerContainer" style="margin-bottom: 1rem;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Non-Striker</label>
+                <select id="ctx-nonstriker" class="form-input" style="width:100%;"></select>
+            </div>
+            
+            <div id="contextBowlerContainer" style="margin-bottom: 1.5rem;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Bowler</label>
+                <select id="ctx-bowler" class="form-input" style="width:100%;"></select>
+            </div>
+            
+            <div style="display:flex; gap:0.5rem;">
+                <button class="btn-cancel" style="flex:1;" onclick="cancelContextModal()">Cancel</button>
+                <button class="btn-submit" style="flex:1; margin-top:0;" onclick="confirmContext()">✅ Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ LIVE SCORING VIEW (standard page layout, below the top nav) ═══ -->
+    <div id="live-scoring-view" style="display:none;">
+
+        <!-- TOOLBAR -->
+        <div class="be-toolbar">
+            <button class="filter-btn" onclick="closeLiveScoring()">← Back to Scorecard</button>
+            <div class="be-toolbar-right">
+                <span id="ls-teams-title" class="be-match-title">Match</span>
+                <span class="be-live-badge">
+                    <span class="pulsing-dot"></span> LIVE
+                </span>
+            </div>
+        </div>
+
+        <!-- TWO-COLUMN GRID -->
+        <div class="be-grid">
+
+            <!-- LEFT COLUMN: SCORECARD -->
+            <div class="be-left-col">
+
+                <!-- Match header / main score -->
+                <div class="be-score-head glass-card">
+                    <div class="be-team-badges">
+                        <span id="ls-batting-team" class="be-team-badge batting">BAT TEAM</span>
+                        <span id="ls-bowling-team" class="be-team-badge bowling">BOWL TEAM</span>
+                    </div>
+                    <div class="be-score-row">
+                        <span id="ls-score" class="be-main-score">0/0</span>
+                        <span id="ls-overs" class="be-main-overs">(0.0)</span>
+                    </div>
+                    <div class="be-crr">CRR: <span id="ls-crr">0.00</span></div>
+                </div>
+
+                <!-- Current over timeline (6 circular indicators) -->
+                <div class="be-over glass-card">
+                    <div id="ls-this-over-label" class="be-over-label">This Over</div>
+                    <div id="ls-this-over-bubbles" class="be-over-dots"></div>
+                </div>
+
+                <!-- Batters (static display, no selection) -->
+                <div class="be-batters glass-card">
+                    <div class="be-batter-row">
+                        <button onclick="manualSwapStriker()" title="Swap striker / non-striker" class="be-swap-btn">🔄</button>
+                        <div class="be-batter-left">
+                            <div id="ls-striker-ind" class="be-batter-dot"></div>
+                            <div id="ls-striker-name" class="be-batter-name">—</div>
+                        </div>
+                        <div class="be-batter-runs">
+                            <span id="ls-striker-runs">0</span><span id="ls-striker-balls" class="be-batter-balls">(0)</span>
+                        </div>
+                    </div>
+                    <div class="be-batter-divider"></div>
+                    <div class="be-batter-row">
+                        <div class="be-batter-left">
+                            <div id="ls-nonstriker-ind" class="be-batter-dot be-batter-dot-off"></div>
+                            <div id="ls-nonstriker-name" class="be-batter-name be-batter-name-off">—</div>
+                        </div>
+                        <div class="be-batter-runs">
+                            <span id="ls-nonstriker-runs">0</span><span id="ls-nonstriker-balls" class="be-batter-balls">(0)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bowler -->
+                <div class="be-bowler glass-card">
+                    <div class="be-bowler-info">
+                        <div id="ls-bowler-name" class="be-bowler-name">—</div>
+                        <div class="be-bowler-sub" onclick="openContextModal('end_over')">BOWLING • TAP TO CHANGE</div>
+                    </div>
+                    <div class="be-bowler-stats">
+                        <div class="be-stat"><div class="be-stat-label">OV</div><div id="ls-bowler-o" class="be-stat-val">0.0</div></div>
+                        <div class="be-stat"><div class="be-stat-label">M</div><div id="ls-bowler-m" class="be-stat-val">0</div></div>
+                        <div class="be-stat"><div class="be-stat-label">R</div><div id="ls-bowler-r" class="be-stat-val">0</div></div>
+                        <div class="be-stat"><div class="be-stat-label">W</div><div id="ls-bowler-w" class="be-stat-val be-stat-w">0</div></div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN: KEYPAD -->
+            <div class="be-right-col">
+                <div class="be-numpad glass-card">
+
+                    <div class="be-numpad-group">
+                        <div class="be-group-label">Runs</div>
+                        <div class="be-grid-runs">
+                            <button class="numpad-btn" onclick="lsRecordRun(0)">0</button>
+                            <button class="numpad-btn" onclick="lsRecordRun(1)">1</button>
+                            <button class="numpad-btn" onclick="lsRecordRun(2)">2</button>
+                            <button class="numpad-btn" onclick="lsRecordRun(3)">3</button>
+                            <button class="numpad-btn numpad-btn-four" onclick="lsRecordRun(4)">4<span class="be-btn-sub">FOUR</span></button>
+                            <button class="numpad-btn numpad-btn-six" onclick="lsRecordRun(6)">6<span class="be-btn-sub">SIX</span></button>
+                        </div>
+                    </div>
+
+                    <div class="be-numpad-group">
+                        <div class="be-group-label">Extras</div>
+                        <div class="be-grid-extras">
+                            <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('Wide')">WD</button>
+                            <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('NoBall')">NB</button>
+                            <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('Bye')">BYE</button>
+                            <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenExtraModal('LegBye')">LB</button>
+                            <button class="numpad-btn numpad-btn-secondary numpad-btn-pen" onclick="lsOpenExtraModal('Penalty')">5 PEN</button>
+                            <button class="numpad-btn numpad-btn-secondary" onclick="lsOpenRetireModal()" title="Retire Batter">🚑</button>
+                        </div>
+                    </div>
+
+                    <div class="be-numpad-actions">
+                        <button class="numpad-btn numpad-btn-out" onclick="lsOpenWicketModal()">🚨 OUT</button>
+                        <button class="numpad-btn numpad-btn-undo" onclick="undoLastBall()">↩ UNDO</button>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ═══ LIVE SCORING SUB-MODALS ═══ -->
+    <!-- Extras Modal -->
+    <div id="lsExtraModal" class="modal-overlay" style="display:none; z-index: 2500; background: rgba(0,0,0,0.8);">
+        <div class="modal-card glass-card" style="max-width:320px; width:90%; text-align:center;">
+            <h3 id="lsExtraTitle" style="margin-bottom: 1rem; color:var(--primary-light);">Wide Ball</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom: 1rem;">Select extra runs (runs off bat/byes):</p>
+            <div style="display:flex; justify-content:center; gap:0.5rem; flex-wrap:wrap; margin-bottom:1.5rem;" id="ls-extra-btns">
+                <button class="run-btn active" data-runs="0" onclick="lsSetExtraRuns(0, this)">+0</button>
+                <button class="run-btn" data-runs="1" onclick="lsSetExtraRuns(1, this)">+1</button>
+                <button class="run-btn" data-runs="2" onclick="lsSetExtraRuns(2, this)">+2</button>
+                <button class="run-btn" data-runs="3" onclick="lsSetExtraRuns(3, this)">+3</button>
+                <button class="run-btn" data-runs="4" onclick="lsSetExtraRuns(4, this)">+4</button>
+                <button class="run-btn" data-runs="5" onclick="lsSetExtraRuns(5, this)">+5</button>
+                <button class="run-btn" data-runs="6" onclick="lsSetExtraRuns(6, this)">+6</button>
+            </div>
+            <div style="display:flex; gap:0.5rem;">
+                <button class="btn-cancel" style="flex:1;" onclick="document.getElementById('lsExtraModal').style.display='none'">Cancel</button>
+                <button class="btn-submit" style="flex:1; margin-top:0;" onclick="lsConfirmExtra()">✅ Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wicket Modal -->
+    <div id="lsWicketModal" class="modal-overlay" style="display:none; z-index: 2500; background: rgba(0,0,0,0.8);">
+        <div class="modal-card glass-card" style="max-width:360px; width:90%; text-align:left;">
+            <h3 style="margin-bottom: 1rem; color:var(--red-ball-light);">Fall of Wicket</h3>
+
+            <div style="margin-bottom: 1rem;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Dismissed Batsman</label>
+                <select id="ls-wicket-who" class="form-input" style="width:100%;"></select>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Dismissal Type</label>
+                <select id="ls-wicket-type" class="form-input" style="width:100%;" onchange="lsOnWicketTypeChange()">
+                    <option value="Bowled">🎯 Bowled</option>
+                    <option value="Caught">🤲 Caught</option>
+                    <option value="CaughtAndBowled">🤾 Caught & Bowled</option>
+                    <option value="LBW">🦵 LBW</option>
+                    <option value="RunOut">🏃 Run Out</option>
+                    <option value="Stumped">🧤 Stumped</option>
+                    <option value="HitWicket">🏏 Hit Wicket</option>
+                    <option value="ObstructingField">🚷 Obstructing the Field</option>
+                    <option value="HandledBall">🖐 Handled the Ball</option>
+                    <option value="TimedOut">⏰ Timed Out</option>
+                    <option value="HitTwice">🔁 Hit the Ball Twice</option>
+                </select>
+            </div>
+
+            <div id="ls-wicket-fielder-box" style="margin-bottom: 1rem; display:none;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Fielder</label>
+                <select id="ls-wicket-fielder" class="form-input" style="width:100%;"></select>
+            </div>
+
+            <div style="margin-bottom: 1rem; padding-top:0.5rem; border-top: 1px dashed rgba(255,255,255,0.1);">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Also off an extra? (optional)</label>
+                <div style="display:flex; gap:0.5rem;">
+                    <select id="ls-wicket-extra-type" class="form-input" style="flex:1;" onchange="lsOnWicketExtraTypeChange()">
+                        <option value="">None</option>
+                        <option value="Wide">Wide</option>
+                        <option value="NoBall">No Ball</option>
+                        <option value="Bye">Bye</option>
+                        <option value="LegBye">Leg Bye</option>
+                    </select>
+                    <select id="ls-wicket-extra-runs" class="form-input" style="width:90px; display:none;">
+                        <option value="0">+0</option>
+                        <option value="1">+1</option>
+                        <option value="2">+2</option>
+                        <option value="3">+3</option>
+                        <option value="4">+4</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:0.5rem;">
+                <button class="btn-cancel" style="flex:1;" onclick="document.getElementById('lsWicketModal').style.display='none'">Cancel</button>
+                <button class="btn-submit" style="flex:1; margin-top:0; background:var(--red-ball); border-color:var(--red-ball-light);" onclick="lsConfirmWicket()">🚨 OUT!</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Retire Batter Modal -->
+    <div id="lsRetireModal" class="modal-overlay" style="display:none; z-index: 2500; background: rgba(0,0,0,0.8);">
+        <div class="modal-card glass-card" style="max-width:340px; width:90%; text-align:left;">
+            <h3 style="margin-bottom: 1rem; color:var(--primary-light);">🚑 Retire Batter</h3>
+
+            <div style="margin-bottom: 1rem;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Which batter is retiring?</label>
+                <select id="ls-retire-who" class="form-input" style="width:100%;"></select>
+            </div>
+
+            <div style="margin-bottom: 1.5rem;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Reason</label>
+                <select id="ls-retire-reason" class="form-input" style="width:100%;">
+                    <option value="RetiredHurt">🩹 Retired Hurt (may return later)</option>
+                    <option value="RetiredOut">🚪 Retired Out (counts as a wicket)</option>
+                </select>
+            </div>
+
+            <div style="display:flex; gap:0.5rem;">
+                <button class="btn-cancel" style="flex:1;" onclick="document.getElementById('lsRetireModal').style.display='none'">Cancel</button>
+                <button class="btn-submit" style="flex:1; margin-top:0;" onclick="lsConfirmRetire()">✅ Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ BALL LOG PANEL (inside scorecard) ═══ -->
+    <!-- This is injected dynamically by JS into the scorecard view -->
+
+    <div id="addMatchModal" class="modal-overlay" style="display:none;">
+        <div class="modal-card glass-card" style="max-width: 800px; width: 90%;">
+            <div class="modal-header">
+                <h3>➕ New Match Wizard</h3>
+                <button class="modal-close-x" onclick="closeAddMatchModal()">✕</button>
+            </div>
+            <form id="addMatchForm" onsubmit="handleMatchWizard(event)">
+                
+                <!-- STEP 1: Details -->
+                <div id="wizard-step-1">
+                    <h4 style="color:var(--primary-light); margin-bottom:1rem;">Step 1: Match Details</h4>
+                    <div class="form-row">
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Match ID *</label>
+                            <input type="number" id="m-id" placeholder="e.g. 2003" required>
+                        </div>
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Format *</label>
+                            <select id="m-format" required>
+                                <option value="T20">T20</option>
+                                <option value="T10">T10</option>
+                                <option value="ODI">ODI</option>
+                                <option value="TEST">TEST</option>
+                            </select>
+                        </div>
+                    </div>
+                    <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Tournament Name *</label>
+                    <select id="m-tournament" required onchange="onTournamentSelect()">
+                        <option value="">-- Select Tournament --</option>
+                    </select>
+                    <div class="form-row">
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Match Type *</label>
+                            <select id="m-type" required>
+                                <option value="League">League</option>
+                                <option value="Group-Stage">Group-Stage</option>
+                                <option value="Semi-Final">Semi-Final</option>
+                                <option value="Final">Final</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Match Date</label>
+                            <input type="date" id="m-date">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Team 1 *</label>
+                            <select id="m-team1" required></select>
+                        </div>
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Team 2 *</label>
+                            <select id="m-team2" required></select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Venue ID *</label>
+                            <select id="m-venue" required></select>
+                        </div>
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Day/Night?</label>
+                            <select id="m-dn">
+                                <option value="0">No</option>
+                                <option value="1">Yes</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Umpire 1 *</label>
+                            <select id="m-ump1" required></select>
+                        </div>
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Umpire 2 *</label>
+                            <select id="m-ump2" required></select>
+                        </div>
+                    </div>
+                    <div class="modal-actions" style="justify-content: flex-end;">
+                        <button type="button" class="btn-submit" style="width:auto; padding:0.6rem 1.4rem;" onclick="goToStep2()">Next: Toss & XI ➡️</button>
+                    </div>
+                </div>
+
+                <!-- STEP 2: Toss -->
+                <div id="wizard-step-2" style="display:none;">
+                    <h4 style="color:var(--primary-light); margin-bottom:1rem;">Step 2: Toss</h4>
+                    
+                    <div class="form-row">
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Toss Winner *</label>
+                            <select id="m-toss-winner" required></select>
+                        </div>
+                        <div>
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">Toss Decision *</label>
+                            <select id="m-toss-decision" required>
+                                <option value="Bat">Bat</option>
+                                <option value="Bowl">Bowl</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="modal-actions" style="margin-top:1.5rem; display:flex; justify-content:space-between;">
+                        <button type="button" class="btn-cancel" style="width:auto; padding:0.6rem 1.4rem;" onclick="goToStep1()">⬅️ Back</button>
+                        <button type="button" class="btn-submit" style="width:auto; padding:0.6rem 1.4rem; margin-top:0;" onclick="goToStep3()">Next: Playing XI ➡️</button>
+                    </div>
+                </div>
+                
+                <!-- STEP 3: Playing XI -->
+                <div id="wizard-step-3" style="display:none;">
+                    <h4 style="color:var(--primary-light); margin-bottom:1rem;">Step 3: Playing XI Selection</h4>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Select exactly 11 players for each team from their tournament squads.</p>
+
+                    <div class="form-row" style="margin-top:1.5rem; align-items:flex-start;">
+                        <div style="flex:1;">
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                                <span><span id="label-team1-xi">Team 1</span> Playing XI *</span>
+                                <span id="count-team1-xi" style="background:var(--primary); color:#000; padding:3px 8px; border-radius:12px; font-size:0.7rem; font-weight:700;">0/11</span>
+                            </label>
+                            <div id="m-team1-xi" style="max-height:400px; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:8px; padding:0.8rem; border:1px solid rgba(255,255,255,0.1); margin-bottom: 0.8rem;"></div>
+                            <select id="m-team1-c" class="form-input" style="margin-bottom:0.5rem; width:100%;"><option value="">Select Captain...</option></select>
+                            <select id="m-team1-wk" class="form-input" style="width:100%;"><option value="">Select Wicket Keeper...</option></select>
+                        </div>
+                        <div style="flex:1;">
+                            <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                                <span><span id="label-team2-xi">Team 2</span> Playing XI *</span>
+                                <span id="count-team2-xi" style="background:var(--primary); color:#000; padding:3px 8px; border-radius:12px; font-size:0.7rem; font-weight:700;">0/11</span>
+                            </label>
+                            <div id="m-team2-xi" style="max-height:400px; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:8px; padding:0.8rem; border:1px solid rgba(255,255,255,0.1); margin-bottom: 0.8rem;"></div>
+                            <select id="m-team2-c" class="form-input" style="margin-bottom:0.5rem; width:100%;"><option value="">Select Captain...</option></select>
+                            <select id="m-team2-wk" class="form-input" style="width:100%;"><option value="">Select Wicket Keeper...</option></select>
+                        </div>
+                    </div>
+
+                    <div class="modal-actions" style="margin-top:1.5rem; display:flex; justify-content:space-between;">
+                        <button type="button" class="btn-cancel" style="width:auto; padding:0.6rem 1.4rem;" onclick="goToStep2()">⬅️ Back</button>
+                        <button type="submit" class="btn-submit" style="width:auto; padding:0.6rem 1.4rem; margin-top:0;">✅ Create Match & XI</button>
+                    </div>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+    <!-- ═══ CONTEXT MODAL (Innings Start / New Over) ═══ -->
+    <div id="contextModal" class="modal-overlay" style="display:none; z-index: 2000;">
+        <div class="modal-card glass-card" style="max-width:400px; width:90%; text-align:center;">
+            <h3 id="contextModalTitle" style="margin-bottom: 1.5rem;">Match Context</h3>
+            
+            <div id="contextStrikerContainer" class="form-group" style="text-align:left;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">🏏 Striker</label>
+                <select id="ctx-striker" class="form-input" style="width:100%;"></select>
+            </div>
+            
+            <div id="contextNonStrikerContainer" class="form-group" style="text-align:left;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">🏏 Non-Striker</label>
+                <select id="ctx-nonstriker" class="form-input" style="width:100%;"></select>
+            </div>
+            
+            <div id="contextBowlerContainer" class="form-group" style="text-align:left;">
+                <label style="color:var(--text-muted); font-size:0.78rem; font-weight:600; display:block; margin-bottom:0.3rem;">🎯 Bowler</label>
+                <select id="ctx-bowler" class="form-input" style="width:100%;"></select>
+            </div>
+            
+            <button class="btn-submit" style="width:100%; margin-top:1rem;" onclick="confirmContext()">✅ Confirm</button>
+        </div>
+    </div>
+
+    <script src="matches.js"></script>
+    <script src="parallax.js"></script>
+    <button id="scroll-top-btn" class="scroll-top-btn" title="Back to top">↑</button>
+</body>
+</html>

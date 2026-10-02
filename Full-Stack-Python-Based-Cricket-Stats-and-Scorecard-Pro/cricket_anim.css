@@ -1,0 +1,27 @@
+/* ═══════════════════════════════════════════════════
+   CricketStats Pro — Stadium Background + Parallax
+   cricket_anim.css
+   ═══════════════════════════════════════════════════ */
+
+/*
+  Stadium photo with parallax:
+  - Extends 40% above and below the viewport so the image
+    has room to travel as it's shifted by parallax.js
+  - will-change: transform gives the browser a GPU hint for
+    smooth scrolling.
+*/
+.stadium-bg-overlay {
+    position: fixed;
+    top:    -40%;       /* extra space above viewport */
+    left:   0;
+    right:  0;
+    bottom: -40%;       /* extra space below viewport */
+    z-index: -1;
+    background-image: url('stadium_bg.png');
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    opacity: 0.12;
+    pointer-events: none;
+    will-change: transform;     /* GPU-accelerated parallax */
+}
